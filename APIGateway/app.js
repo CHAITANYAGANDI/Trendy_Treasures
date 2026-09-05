@@ -139,9 +139,15 @@ app.use('/api/v1/user/recovery', authLimiter);
 
 // Trust-proxy: must NOT be `true` because express-rate-limit (correctly)
 // refuses to run if any client can spoof their IP via X-Forwarded-For.
-// In local dev we trust loopback only; in prod set TRUST_PROXY to the
-// number of upstream proxies (Render/Heroku is typically 1).
-app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
+// In local dev we trust loopback only; in prod Render/Heroku put exactly
+// one proxy in front, so trust one hop.
+//
+// This defaulted to 'loopback' in every environment, which meant that in
+// production req.ip resolved to the load balancer for EVERY request — so
+// express-rate-limit bucketed the entire internet into a single 120/min
+// counter and the storefront started 429ing under trivial load. Matches
+// Users/ and Amazon/, which already had the production default.
+app.set('trust proxy', process.env.TRUST_PROXY || (isProduction ? 1 : 'loopback'));
 
 app.use((req, res, next) => {
     req.headers['x-original-url'] = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
@@ -478,6 +484,15 @@ const proxyProductRoute = (apiName, provider, target, prefix) => async (req, res
         if (token) headers['productsauthorization'] = token;
         if (req.headers['accept']) headers['accept'] = req.headers['accept'];
         if (req.headers['cookie']) headers['cookie'] = req.headers['cookie'];
+        // Upstream rate limiters see this gateway's egress IP on every
+        // proxied call, so without this they bucket every shopper on the
+        // internet into one 120/min counter. Pass the real client IP along,
+        // authenticated with the shared internal secret so that a caller
+        // hitting Amazon/Walmart directly cannot forge a key.
+        if (process.env.INTERNAL_AUTH_SECRET && req.ip) {
+            headers['x-internal-auth'] = process.env.INTERNAL_AUTH_SECRET;
+            headers['x-real-client-ip'] = req.ip;
+        }
         return fetch(upstreamUrl, { method: req.method, headers });
     };
 
@@ -541,6 +556,13 @@ const proxyProductRoute = (apiName, provider, target, prefix) => async (req, res
 const forwardHeaders = (proxyReq, req) => {
     if (req.requestId) proxyReq.setHeader('x-request-id', req.requestId);
     if (req.headers['x-original-url']) proxyReq.setHeader('x-original-url', req.headers['x-original-url']);
+    // Same reasoning as the product proxy: Users would otherwise rate-limit
+    // every shopper under this gateway's egress IP. Authenticated with the
+    // shared secret so it can't be forged by calling Users directly.
+    if (process.env.INTERNAL_AUTH_SECRET && req.ip) {
+        proxyReq.setHeader('x-internal-auth', process.env.INTERNAL_AUTH_SECRET);
+        proxyReq.setHeader('x-real-client-ip', req.ip);
+    }
 };
 
 app.use('/api/v1/user', createProxyMiddleware({

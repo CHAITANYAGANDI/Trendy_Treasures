@@ -8,7 +8,6 @@ import {
   amazonFetch,
   walmartFetch,
   mergeGuestCart,
-  handleError,
   getGuestCart,
 } from '../utils';
 import SiteHeader from './SiteHeader';
@@ -19,6 +18,51 @@ const AMAZON_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_
 const WALMART_LOGO = 'https://i5.walmartimages.com/dfw/63fd9f59-b3e1/7a569e53-f29a-4c3d-bfaf-6f7a158bfadd/v1/walmartLogo.svg';
 
 const ITEMS_PER_PAGE = 12;
+
+// Render's free tier spins idle services down, so the first request after a
+// quiet period can 502/503 or simply hang while the container wakes. Bound
+// each attempt and retry those, but never retry a 429: the limiter window is
+// a full minute, so an immediate retry only deepens the hole.
+const PRODUCT_FETCH_TIMEOUT_MS = 15000;
+const PRODUCT_FETCH_RETRIES = 2;
+const PRODUCT_FETCH_BACKOFF_MS = 500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Loads one provider's catalogue. Returns a result object instead of
+// throwing, so one dead provider cannot take the whole page down.
+const loadProviderCatalogue = async (fetcher, source) => {
+  let lastStatus = 0;
+
+  for (let attempt = 0; attempt <= PRODUCT_FETCH_RETRIES; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PRODUCT_FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetcher('/get', { credentials: 'include', signal: controller.signal });
+      lastStatus = res.status;
+      if (res.ok) {
+        const data = await res.json();
+        const items = Array.isArray(data) ? data : data.products || [];
+        return { source, ok: true, status: res.status, items: items.map((item) => ({ ...item, source })) };
+      }
+      // Anything below 500 (bad request, auth, rate limit) will not fix
+      // itself in the next second, so fail fast instead of burning retries.
+      if (res.status < 500) return { source, ok: false, status: res.status, items: [] };
+    } catch (err) {
+      // Timed out or the network dropped — worth another attempt.
+      lastStatus = 0;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (attempt < PRODUCT_FETCH_RETRIES) {
+      await sleep(PRODUCT_FETCH_BACKOFF_MS * 2 ** attempt);
+    }
+  }
+
+  return { source, ok: false, status: lastStatus, items: [] };
+};
+
 const SOURCE_FILTERS = new Set(['all', 'amazon', 'walmart']);
 const SORT_OPTIONS = new Set(['featured', 'price-asc', 'price-desc', 'name']);
 
@@ -61,6 +105,7 @@ function Home() {
   const [sourceFilter, setSourceFilter] = useState(() => sourceFromParams(searchParams));
   const [sort, setSort] = useState(() => sortFromParams(searchParams));
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const navigate = useNavigate();
 
   const updateListingParams = useCallback((changes, options = {}) => {
@@ -169,41 +214,38 @@ function Home() {
     }
   };
 
-  const fetchProducts = async () => {
+  // Both providers are fetched concurrently. They used to be awaited one
+  // after the other, so a cold start on the first one doubled the time
+  // before anything appeared on screen.
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
-    let walmartProducts = [];
-    let amazonProducts = [];
 
-    try {
-      const res = await walmartFetch('/get', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        walmartProducts = Array.isArray(data) ? data : data.products || [];
-      }
-    } catch (err) {
-      console.warn('Walmart products could not be fetched:', err);
-    }
-
-    try {
-      const res = await amazonFetch('/get', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        amazonProducts = Array.isArray(data) ? data : data.products || [];
-      }
-    } catch (err) {
-      console.warn('Amazon products could not be fetched:', err);
-    }
-
-    setProducts([
-      ...walmartProducts.map((p) => ({ ...p, source: 'walmart' })),
-      ...amazonProducts.map((p) => ({ ...p, source: 'amazon' })),
+    const results = await Promise.all([
+      loadProviderCatalogue(walmartFetch, 'walmart'),
+      loadProviderCatalogue(amazonFetch, 'amazon'),
     ]);
+
+    const failed = results.filter((result) => !result.ok);
+
+    setProducts(results.filter((result) => result.ok).flatMap((result) => result.items));
+    // An upstream failure used to be indistinguishable from an empty
+    // catalogue: both rendered "No products match your search". Track it
+    // so the UI can tell the user what actually happened.
+    setLoadError(
+      failed.length
+        ? {
+            sources: failed.map((result) => result.source),
+            rateLimited: failed.some((result) => result.status === 429),
+            total: failed.length === results.length,
+          }
+        : null
+    );
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProducts().catch((e) => handleError(e.message));
-  }, []);
+    fetchProducts();
+  }, [fetchProducts]);
 
   const filteredProducts = useMemo(() => {
     let list = products;
@@ -350,6 +392,17 @@ function Home() {
           </p>
         </div>
 
+        {!loading && loadError && !loadError.total && (
+          <div className="card px-5 py-4 mb-5 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-ink-600">
+              Showing partial results — the {loadError.sources.join(' and ')} catalogue did not load.
+            </p>
+            <button onClick={fetchProducts} className="btn-secondary !py-2 !px-4 !text-sm">
+              Retry
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -362,6 +415,20 @@ function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : loadError && loadError.total ? (
+          <div className="card p-12 text-center animate-fade-in">
+            <h3 className="text-xl font-semibold text-ink-900">
+              {loadError.rateLimited ? 'Too many requests right now' : 'We could not load products'}
+            </h3>
+            <p className="text-ink-500 mt-2">
+              {loadError.rateLimited
+                ? 'The store hit its rate limit. Give it a few seconds and try again.'
+                : 'The product services did not respond — they may still be waking up.'}
+            </p>
+            <button onClick={fetchProducts} className="btn-secondary mt-6">
+              Try again
+            </button>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="card p-12 text-center animate-fade-in">

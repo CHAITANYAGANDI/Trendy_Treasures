@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
@@ -113,12 +113,42 @@ app.use(helmet({
 // doesn't trip the limiter.
 const isInternalRoute = (req) => req.path.startsWith('/internal/');
 
+// Requests proxied by the APIGateway all arrive from the gateway's single
+// egress IP, so keying on req.ip alone put every shopper into one bucket and
+// 429'd the storefront under trivial load. The gateway forwards the real
+// client IP alongside the shared internal secret; trust it only when that
+// secret verifies, so a caller reaching this service directly cannot forge
+// another shopper's key.
+const { timingSafeEqual } = require('crypto');
+
+const timingSafeEq = (a, b) => {
+    const left = Buffer.from(String(a || ''));
+    const right = Buffer.from(String(b || ''));
+    return left.length === right.length && timingSafeEqual(left, right);
+};
+
+const rateLimitKey = (req) => {
+    try {
+        const secret = process.env.INTERNAL_AUTH_SECRET;
+        const provided = req.headers['x-internal-auth'];
+        const realIp = req.headers['x-real-client-ip'];
+        if (secret && provided && realIp && timingSafeEq(provided, secret)) {
+            return `gw:${realIp}`;
+        }
+    } catch {
+        // Fall through to the default per-IP key.
+    }
+    // ipKeyGenerator normalises an IPv6 address into a subnet key.
+    return ipKeyGenerator(req.ip);
+};
+
 const generalLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_PER_MIN || '120', 10),
     standardHeaders: true,
     legacyHeaders: false,
     skip: isInternalRoute,
+    keyGenerator: rateLimitKey,
     message: { error: 'Too many requests, slow down.' }
 });
 
@@ -127,6 +157,7 @@ const authLimiter = rateLimit({
     max: parseInt(process.env.AUTH_RATE_LIMIT_PER_15M || '30', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
     message: { error: 'Too many auth attempts. Try again later.' }
 });
 

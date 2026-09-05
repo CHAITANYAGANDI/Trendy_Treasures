@@ -8,7 +8,7 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 const path = require('path');
-const { randomUUID } = require('crypto');
+const { randomUUID, timingSafeEqual } = require('crypto');
 
 const ProductRouter = require('./Routes/ProductRouter');
 const OrderRouter = require('./Routes/OrderRouter');
@@ -75,11 +75,38 @@ app.use(helmet({
 // it's on private networking, so the gateway's IP limit alone isn't
 // sufficient. /payments/* gets a tighter window because each call hits
 // Stripe and costs money on abuse.
+// Every request proxied by the APIGateway arrives from the gateway's single
+// egress IP, so keying purely on req.ip lumped all shoppers into one bucket
+// and 429'd the storefront under trivial load. The gateway sends the real
+// client IP together with the shared internal secret; trust that IP only
+// when the secret verifies, so a caller hitting this service directly
+// cannot forge someone else's key.
+const timingSafeEq = (a, b) => {
+    const left = Buffer.from(String(a || ''));
+    const right = Buffer.from(String(b || ''));
+    return left.length === right.length && timingSafeEqual(left, right);
+};
+
+const rateLimitKey = (req) => {
+    try {
+        const secret = process.env.INTERNAL_AUTH_SECRET;
+        const provided = req.headers['x-internal-auth'];
+        const realIp = req.headers['x-real-client-ip'];
+        if (secret && provided && realIp && timingSafeEq(provided, secret)) {
+            return `gw:${realIp}`;
+        }
+    } catch {
+        // Fall through to the default per-IP key.
+    }
+    return req.ip;
+};
+
 app.use(rateLimit({
     windowMs: 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_PER_MIN || '120', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
     message: { error: 'Too many requests, slow down.' }
 }));
 
@@ -88,6 +115,7 @@ app.use('/payments', rateLimit({
     max: parseInt(process.env.PAYMENTS_RATE_LIMIT_PER_MIN || '20', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
     message: { error: 'Too many payment attempts. Try again later.' }
 }));
 

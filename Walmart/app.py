@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import uuid
@@ -51,8 +52,27 @@ Talisman(
 # networking, so the gateway's IP limit isn't sufficient on its own.
 # /payments/* gets a tighter window because each call hits Stripe and
 # costs money on abuse.
+
+# Every request proxied by the APIGateway arrives from the gateway's single
+# egress IP, so keying purely on the remote address lumped all shoppers into
+# one bucket and 429'd the storefront under trivial load. The gateway sends
+# the real client IP together with the shared internal secret; trust that IP
+# only when the secret verifies, so a caller hitting this service directly
+# cannot forge someone else's key.
+def rate_limit_key():
+    try:
+        secret = os.environ.get('INTERNAL_AUTH_SECRET')
+        provided = request.headers.get('x-internal-auth')
+        real_ip = request.headers.get('x-real-client-ip')
+        if secret and provided and real_ip and hmac.compare_digest(provided, secret):
+            return f'gw:{real_ip}'
+    except Exception:
+        pass
+    return get_remote_address()
+
+
 limiter = Limiter(
-    get_remote_address,
+    rate_limit_key,
     app=app,
     default_limits=[
         f"{os.environ.get('RATE_LIMIT_PER_MIN', '120')} per minute",
