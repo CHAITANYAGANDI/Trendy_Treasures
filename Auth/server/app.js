@@ -75,11 +75,34 @@ app.use(helmet({
     referrerPolicy: { policy: 'same-origin' }
 }));
 
+// Service-to-service token endpoints. These are called by the APIGateway
+// (RS256 assertion) and by Amazon/Walmart (x-internal-auth), so they all
+// arrive from a handful of fixed egress IPs and would otherwise share the
+// same 200-per-15-minute budget as a single browser. When that budget ran
+// out, provider tokens could no longer be refreshed and the storefront lost
+// its entire catalogue until traffic died down. Both endpoints are already
+// gated by cryptographic auth, so give them their own, much larger budget.
+const INTERNAL_TOKEN_PATHS = ['/auth/token/refresh', '/auth/token/active'];
+const isInternalTokenPath = (req) =>
+    INTERNAL_TOKEN_PATHS.some((prefix) => req.path.startsWith(prefix));
+
+const internalTokenLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: parseInt(process.env.INTERNAL_TOKEN_RATE_LIMIT_PER_MIN || '600', 10),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many token requests, slow down.' }
+});
+
+app.use(INTERNAL_TOKEN_PATHS, internalTokenLimiter);
+
 app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 200,
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    // Covered by internalTokenLimiter above — don't bill them twice.
+    skip: isInternalTokenPath
 }));
 
 

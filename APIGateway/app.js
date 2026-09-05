@@ -245,11 +245,27 @@ const signGatewayAssertion = (clientId) => {
     );
 };
 
+// A failed refresh used to be retried on EVERY subsequent product request.
+// When the auth server itself is the unhappy party (it rate-limited us, it
+// is cold-starting, it is down), that turns a single failure into a
+// self-sustaining storm: each request fires another refresh, which keeps the
+// budget exhausted, so nothing can ever recover while traffic continues.
+// Back off for a fixed window instead and serve the upstream error directly.
+const refreshCooldownUntil = new Map();
+const REFRESH_COOLDOWN_MS = parseInt(process.env.REFRESH_COOLDOWN_MS || '30000', 10);
+
 const refreshAccessToken = (apiName, reqId = '-') => {
     const key = apiName.toLowerCase();
     if (refreshesInFlight.has(key)) {
         console.log(`[gateway] [${reqId}] ↻ Refresh already in-flight for ${apiName}, awaiting existing promise`);
         return refreshesInFlight.get(key);
+    }
+
+    const cooldownUntil = refreshCooldownUntil.get(key);
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+        const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000);
+        console.warn(`[gateway] [${reqId}] ⏳ Refresh for ${apiName} is backing off for another ${secondsLeft}s — not retrying`);
+        return Promise.resolve(null);
     }
 
     const promise = (async () => {
@@ -297,10 +313,16 @@ const refreshAccessToken = (apiName, reqId = '-') => {
         } catch (err) {
             console.error(`[gateway] [${reqId}] ✗ Refresh threw for ${apiName}:`, err.message);
             return null;
-        } finally {
-            refreshesInFlight.delete(key);
         }
-    })();
+    })().then((token) => {
+        if (token) {
+            refreshCooldownUntil.delete(key);
+        } else {
+            refreshCooldownUntil.set(key, Date.now() + REFRESH_COOLDOWN_MS);
+        }
+        refreshesInFlight.delete(key);
+        return token;
+    });
 
     refreshesInFlight.set(key, promise);
     return promise;
