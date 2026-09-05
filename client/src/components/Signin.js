@@ -1,17 +1,33 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { FaArrowRight, FaGoogle } from 'react-icons/fa';
-import { handleError, handleSuccess, API_BASE, apiFetch } from '../utils';
+import { handleError, handleSuccess, API_BASE, apiFetch, googleErrorMessage } from '../utils';
 import AuthLayout from './AuthLayout';
+import FormErrorBanner from './FormErrorBanner';
 
 function Signin() {
     const [loginInfo, setLoginInfo] = useState({ email: '', password: '' });
     const [submitting, setSubmitting] = useState(false);
+    const [errorBanner, setErrorBanner] = useState('');
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Google sign-in failures come back as a redirect to /login?error=<code>
+    // (the OAuth round-trip is a full page navigation, so there is no fetch
+    // response to read). Surface the reason, then strip the param so a
+    // refresh does not resurrect a stale banner.
+    useEffect(() => {
+        const code = searchParams.get('error');
+        if (!code) return;
+        setErrorBanner(googleErrorMessage(code));
+        searchParams.delete('error');
+        setSearchParams(searchParams, { replace: true });
+    }, [searchParams, setSearchParams]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setLoginInfo((prev) => ({ ...prev, [name]: value }));
+        if (errorBanner) setErrorBanner('');
     };
 
     const handleLogin = async (e) => {
@@ -62,6 +78,12 @@ function Signin() {
                 </>
             }
         >
+            {errorBanner && (
+                <div className="mb-4">
+                    <FormErrorBanner message={errorBanner} />
+                </div>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                     <label htmlFor="email" className="field-label">Email</label>

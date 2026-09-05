@@ -1,21 +1,41 @@
 const axios = require('axios');
-const UserModel = require("../Models/User");
 
 require('dotenv').config();
 
-
+// The storefront always talks to Users THROUGH the APIGateway, so the
+// OAuth round-trip has to stay on the gateway's origin too. If the
+// redirect_uri pointed straight at Users (:7001), Google would drop the
+// browser on a host that never sees the `user_google_oauth_state` cookie
+// we set on the gateway origin — and the session cookies minted in the
+// callback would land on the wrong host for the SPA to ever send them.
+// Locally this is masked (cookies are shared across ports on localhost);
+// on Render the two are different registrable domains and it breaks.
 const getRedirectUri = () =>
-  process.env.GOOGLE_REDIRECT_URI || 'http://localhost:7001/auth/google/callback';
+  process.env.GOOGLE_REDIRECT_URI ||
+  'http://localhost:7000/api/v1/user/auth/google/callback';
 
+const isGoogleConfigured = () =>
+  Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
-function getGoogleAuthURL() {
-  const redirectUri = getRedirectUri();
-
-  return `https://accounts.google.com/o/oauth2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid%20email%20profile&response_type=code`;
+function getGoogleAuthURL(state) {
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID || '',
+    redirect_uri: getRedirectUri(),
+    scope: 'openid email profile',
+    response_type: 'code',
+    access_type: 'online',
+    prompt: 'select_account'
+  });
+  if (state) params.set('state', state);
+  return `https://accounts.google.com/o/oauth2/auth?${params.toString()}`;
 }
 
+// Exchanges the one-time code for a profile. Deliberately does NO database
+// work: provisioning lives in the router so the account-takeover guard
+// (existing password account with the same email) runs before any write
+// and can redirect the browser to a real error page.
 async function getGoogleUser(code) {
-  const response = await axios.post('https://oauth2.googleapis.com/token', {
+  const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
     code,
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
@@ -23,37 +43,18 @@ async function getGoogleUser(code) {
     grant_type: 'authorization_code'
   });
 
+  const accessToken = tokenResponse.data.access_token;
 
-  const accessToken = response.data.access_token;
   const userResponse = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
 
-  const email = userResponse.data.email;
-  const name = userResponse.data.name;
-  const emailVerified = userResponse.data.email_verified === true || userResponse.data.email_verified === 'true';
-
-  if (!emailVerified) {
-    const err = new Error('Google email is not verified');
-    err.code = 'GOOGLE_EMAIL_UNVERIFIED';
-    throw err;
-  }
-
-  const googleUser = await UserModel.findOne({ email });
-
-  if (!googleUser) {
-    const googleUserModel = new UserModel({ name, email, isGoogleUser: true });
-    await googleUserModel.save();
-  }
-
-
-  return {
-    accessToken: accessToken,
-    user: userResponse.data
-  };
+  return { accessToken, user: userResponse.data };
 }
 
 module.exports = {
   getGoogleAuthURL,
   getGoogleUser,
+  getRedirectUri,
+  isGoogleConfigured
 };

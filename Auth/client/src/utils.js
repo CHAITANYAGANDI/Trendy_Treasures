@@ -184,3 +184,21 @@ export const fetchCurrentClient = async () => {
 };
 
 export const logoutClient = () => authFetch('/logout', { method: 'POST' });
+
+
+// Human-readable copy for the ?error=<code> values Auth/server appends to
+// /auth/login when a Google sign-in round-trip fails. Keep in sync with
+// Auth/server/Routes/GoogleAuthRouter.js.
+export const GOOGLE_ERROR_MESSAGES = {
+    google_unconfigured: 'Google sign-in is not set up on this deployment yet.',
+    google_cancelled: 'Google sign-in was cancelled.',
+    google_state_invalid: 'That Google sign-in attempt expired. Please try again.',
+    google_no_email: 'Google did not share an email address with us.',
+    google_email_unverified: 'Your Google email address is not verified.',
+    email_already_registered:
+        'That email already has a password account here. Sign in with your password instead.',
+    google_failed: 'Google sign-in failed. Please try again.'
+};
+
+export const googleErrorMessage = (code) =>
+    GOOGLE_ERROR_MESSAGES[code] || 'Google sign-in failed. Please try again.';

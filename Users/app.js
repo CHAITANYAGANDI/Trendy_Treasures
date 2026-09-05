@@ -46,6 +46,23 @@ const requireProdEnv = () => {
         console.error('[users] FATAL: JWT_SECRET is too short for production (need >=32 chars).');
         process.exit(1);
     }
+
+    // Google sign-in is optional, but a HALF-configured client is worse
+    // than none: the button would bounce the user to a raw Google
+    // "invalid_client" page. Either set all three or leave all three empty.
+    const googleVars = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI'];
+    const googleSet = googleVars.filter((name) => process.env[name]);
+    if (googleSet.length > 0 && googleSet.length < googleVars.length) {
+        const absent = googleVars.filter((name) => !process.env[name]);
+        console.error(`[users] FATAL: partial Google OAuth config — also set: ${absent.join(', ')}`);
+        process.exit(1);
+    }
+    // The storefront reaches Users through the gateway, so the OAuth
+    // round-trip must come back through the gateway too or the state and
+    // session cookies land on a host the SPA never talks to.
+    if (googleSet.length === googleVars.length && !String(process.env.GOOGLE_REDIRECT_URI).includes('/user/auth/google/callback')) {
+        console.warn('[users] WARNING: GOOGLE_REDIRECT_URI should point at the APIGateway path (…/api/v1/user/auth/google/callback), not directly at this service.');
+    }
 };
 
 requireProdEnv();

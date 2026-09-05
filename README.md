@@ -306,6 +306,34 @@ Every service has a `.env.example`. Production values are not in this repo.
 - `GATEWAY_PRIVATE_KEY` lives only on the gateway; `GATEWAY_PUBLIC_KEY` lives only on Auth. Generate them with `node genkeys.js`.
 - Users' `JWT_SECRET` and Auth's `JWT_SECRET` are **two separate values** — same env var name, different domains.
 
+### Google sign-in ("Continue with Google")
+
+Both the storefront and AuthShield support Google sign-in. It is **optional** — leave the three `GOOGLE_*` vars empty and the button redirects to `?error=google_unconfigured` instead of breaking.
+
+The two apps are **separate OAuth surfaces with separate user tables**, and this project uses a **separate OAuth client for each** (both live in the same Google Cloud project). A redirect URI added to one client does *not* apply to the other. Create them at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials) → *Create credentials* → *OAuth client ID* → *Web application*.
+
+**Authorized redirect URIs** (all four, exactly — Google does prefix-free exact matching):
+
+| App | OAuth client | Local | Production |
+|---|---|---|---|
+| Storefront (via gateway) | `...6paebbjvpk...` | `http://localhost:7000/api/v1/user/auth/google/callback` | `https://api-gateway-uwnd.onrender.com/api/v1/user/auth/google/callback` |
+| AuthShield (direct) | `...cn48pr91cg...` | `http://localhost:5000/auth/google/callback` | `https://auth-service-0g7e.onrender.com/auth/google/callback` |
+
+The redirect URI is a **backend** URL — that is where the code-for-token exchange happens, because that is the only place the client secret lives. The SPA's own `/auth/google/callback` route is where the *backend* sends the browser afterwards; it must never be registered with Google.
+
+**Authorized JavaScript origins:**
+
+| App | Local | Production |
+|---|---|---|
+| Storefront | `http://localhost:3001` | `https://ecommerce-test-qvvv.vercel.app` |
+| AuthShield | `http://localhost:3002` | `https://ecommerce-test-lemon-xi.vercel.app` |
+
+Then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in both `Users/.env` and `Auth/server/.env` (and in the matching Render service env for production). Each service gets **its own** client's ID/secret plus its own redirect URI from the table above. Set all three or none — a partially configured client aborts boot in production.
+
+> **The storefront's redirect URI must point at the gateway, not at Users directly.** The SPA reaches Users through the gateway, so the OAuth round-trip has to end on the gateway's origin — otherwise the `user_google_oauth_state` cookie and the session cookies are set on a hostname the SPA never sends cookies to. Locally this is invisible (`localhost:7000` and `localhost:7001` share one cookie jar); on Render they are separate hosts and sign-in fails with `google_state_invalid`.
+
+An email that already has a **password** account cannot be claimed via Google (`?error=email_already_registered`) — that guard exists on both services so nobody can take over an account by registering the matching Google address.
+
 ---
 
 ## 10. Running locally

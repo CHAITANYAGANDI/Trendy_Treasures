@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { handleSuccess, authFetch } from '../utils';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { handleSuccess, authFetch, googleErrorMessage } from '../utils';
 import GoogleSignInButton, { GoogleDivider } from './GoogleSignInButton';
 
 const ACCENT = '#426fe7';
@@ -15,6 +15,19 @@ function AuthLogin() {
     const [submitting, setSubmitting] = useState(false);
 
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Google sign-in failures arrive as a redirect to
+    // /auth/login?error=<code> — the OAuth round-trip is a full page
+    // navigation, so there is no fetch response to read. Surface the
+    // reason, then strip the param so a refresh does not resurrect it.
+    useEffect(() => {
+        const code = searchParams.get('error');
+        if (!code) return;
+        setErrorBanner(googleErrorMessage(code));
+        searchParams.delete('error');
+        setSearchParams(searchParams, { replace: true });
+    }, [searchParams, setSearchParams]);
 
     useEffect(() => {
         const body = document.body;

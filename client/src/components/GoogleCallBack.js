@@ -1,22 +1,39 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch } from '../utils';
+import { apiFetch, fetchCurrentUser } from '../utils';
 
 function GoogleAuthCallback() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function fetchGoogleAuth() {
+    let mounted = true;
+
+    async function completeGoogleSignIn() {
+      // /authenticate consumes the one-shot `userInfo` handoff cookie. It
+      // is only a nicety though — the real proof of sign-in is the session
+      // cookie, so a miss here (already consumed, page refreshed) falls
+      // back to /auth/me before we declare failure.
       try {
         const response = await apiFetch('/authenticate');
-        if (response.ok) navigate('/home');
-        else navigate('/login');
+        if (!mounted) return;
+        if (response.ok) {
+          navigate('/home', { replace: true });
+          return;
+        }
       } catch (error) {
-        console.error('Error handling callback:', error);
-        navigate('/login');
+        console.error('Error handling Google callback:', error);
       }
+
+      const user = await fetchCurrentUser();
+      if (!mounted) return;
+      if (user) navigate('/home', { replace: true });
+      else navigate('/login?error=google_failed', { replace: true });
     }
-    fetchGoogleAuth();
+
+    completeGoogleSignIn();
+    return () => {
+      mounted = false;
+    };
   }, [navigate]);
 
   return (
