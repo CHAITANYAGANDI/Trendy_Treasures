@@ -2,55 +2,56 @@
 
 TrendyTreasures is an online storefront made up of **seven small services** that work together. Shoppers see a single catalog, but the products actually come from two simulated providers (Amazon and Walmart). When the shopper is ready to pay, TrendyTreasures hands them over to the provider's own checkout page — the provider takes the money and ships the order. TrendyTreasures itself never touches the payment.
 
-> **Live deployment:** the storefront runs on Vercel, six backend services run on Render, data lives in MongoDB Atlas, payments go through Stripe (test mode), email is sent through Brevo, and AI features use OpenAI. For deeper details, see the [`docs/`](docs/) folder.
+> **Live deployment:** the Storefront and AuthShield SPAs run on Vercel. The API Gateway, Users, Auth, Amazon, and Walmart backends run on Google Cloud Run in Toronto (`northamerica-northeast2`). Runtime secrets are stored in Google Secret Manager, source deployments build through Cloud Build and Artifact Registry, data lives in MongoDB Atlas, payments use Stripe (test mode), email is sent through Brevo, and AI features use OpenAI. For deeper details, see the [`docs/`](docs/) folder.
 
 ---
 
 ## What makes this project interesting
 
-- **It mixes two programming languages.** Five services are written in Node.js + Express; one (Walmart) is written in Python + Flask. The two stacks talk to each other only through HTTP and signed JWTs, which proves the service boundaries really are language-agnostic.
+- **It mixes two programming languages.** Four backend services are written in Node.js + Express; Walmart is written in Python + Flask. The two stacks talk to each other only through HTTP and signed JWTs, which proves the service boundaries really are language-agnostic.
 - **Three separate login systems, on purpose.** Shoppers, admins, and developers each have their own login flow with their own secret keys. If one secret leaks, the other two are unaffected.
 - **Asymmetric keys between the gateway and Auth.** The gateway signs with a private key; Auth verifies with a public key. So even if someone breaks into the Auth server, they still can't forge a new token without the gateway's private key.
 - **Payment amounts are recomputed on the server.** The browser never tells the provider how much to charge — the server figures out the price from a trusted record. A user editing the page can't pay less than they owe.
 - **Tokens can be revoked instantly.** Every provider token carries a `jti` (token ID). Re-authorizing rotates that ID, and any token with the old `jti` is rejected on the next call.
-- **Cross-domain CSRF protection.** Because the storefront is on `*.vercel.app` and the API is on `*.onrender.com`, we use a "double-submit cookie" pattern where the CSRF token is also returned in the response body, since JavaScript can't read cookies across different registrable domains.
+- **Cross-domain CSRF protection.** Because the storefront is on `*.vercel.app` and the API is on Google Cloud Run's `*.run.app` domain, we use a "double-submit cookie" pattern where the CSRF token is also returned in the response body, since JavaScript can't read cookies across different registrable domains.
 
 ---
 
 ## 1. Architecture at a glance
 
-```
-                                   ┌──────────────────────┐
-                                   │   Storefront SPA     │   Vercel
-                                   │      (client/)       │
-                                   └──────────┬───────────┘
-                                              │  fetch (credentials: 'include')
-                                              ▼
-┌──────────────────────┐            ┌──────────────────────┐
-│   Auth SPA           │            │     API Gateway      │   Render
-│   (Auth/client/)     │            │    (APIGateway/)     │
-└──────────┬───────────┘            └──────┬───────┬───────┘
-           │ Vercel                        │       │
-           ▼                               ▼       ▼
-┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐
-│     Auth server      │    │    Users service     │    │   Amazon service     │
-│   (Auth/server/)     │    │      (Users/)        │    │     (Amazon/)        │
-│   Node + Express     │    │   Node + Express     │    │   Node + Express     │
-└──────────┬───────────┘    └──────────┬───────────┘    └──────────┬───────────┘
-           │                           │                ┌──────────┴───────────┐
-           │                           │                │   Walmart service    │
-           │                           │                │     (Walmart/)       │
-           │                           │                │   Python + Flask     │
-           │                           │                └──────────┬───────────┘
-           │                           │                           │
-           └───────────────────────────┴───────────────────────────┘
-                                       │
-                                       ▼
-                          ┌──────────────────────────┐
-                          │  MongoDB Atlas (4 DBs)   │
-                          │ trendytreasures │ auth │ │
-                          │  amazon    │ walmart     │
-                          └──────────────────────────┘
+```mermaid
+flowchart TB
+    Storefront["Storefront SPA<br/>React · Vercel"]
+    AuthClient["AuthShield SPA<br/>React · Vercel"]
+    Gateway["API Gateway<br/>Node.js + Express · Cloud Run"]
+    Users["Users service<br/>Node.js + Express · Cloud Run"]
+    Auth["Auth server<br/>Node.js + Express · Cloud Run"]
+    Amazon["Amazon provider<br/>Node.js + Express · Cloud Run"]
+    Walmart["Walmart provider<br/>Python + Flask · Cloud Run"]
+    Atlas[("MongoDB Atlas<br/>storefront · auth · amazon · walmart")]
+    Secrets["Google Secret Manager<br/>runtime secrets"]
+    Actions["GitHub Actions<br/>6-hour price snapshots"]
+
+    Storefront --> Gateway
+    AuthClient --> Auth
+    Gateway --> Users
+    Gateway --> Amazon
+    Gateway --> Walmart
+    Gateway --> Auth
+    Users --> Auth
+    Amazon --> Auth
+    Walmart --> Auth
+    Users --> Atlas
+    Gateway --> Atlas
+    Auth --> Atlas
+    Amazon --> Atlas
+    Walmart --> Atlas
+    Secrets -.-> Gateway
+    Secrets -.-> Users
+    Secrets -.-> Auth
+    Secrets -.-> Amazon
+    Secrets -.-> Walmart
+    Actions --> Gateway
 ```
 
 ### The seven services
@@ -109,13 +110,16 @@ E_Commerce_Prod/
 | Layer | What we use |
 |---|---|
 | Frontend | React 18, React Router v6, react-toastify, Tailwind |
-| Backends (5 services) | Node.js 20, Express 4 |
-| Backend (1 service) | Python 3.12, Flask, MongoEngine |
+| Node backends (4 services) | Node.js 20, Express 4 |
+| Python backend (1 service) | Python 3.12, Flask, MongoEngine |
 | Gateway | Express + `http-proxy-middleware` v3 |
-| Database | MongoDB Atlas — one database per service |
+| Hosting | Vercel for both React SPAs; Google Cloud Run for all five backends |
+| Build + registry | Google Cloud Build + Artifact Registry |
+| Secrets | Google Secret Manager with a dedicated runtime service account per backend |
+| Database | MongoDB Atlas — isolated databases for storefront, Auth, Amazon, and Walmart |
 | Auth | JWTs (`jsonwebtoken`, `pyjwt`), bcrypt for passwords, RS256 keypair for gateway↔Auth, optional Google OAuth2 |
 | Payments | Stripe (test mode), server-side amount verification |
-| Email | Brevo's HTTPS API (Render's free tier blocks regular SMTP) |
+| Email | Brevo HTTPS API |
 | AI | OpenAI's `gpt-4o-mini` for price advice and product Q&A |
 | Security | `helmet`, `express-rate-limit`, double-submit CSRF, httpOnly cookies, CSP form-action allowlist |
 
@@ -316,8 +320,8 @@ The two apps are **separate OAuth surfaces with separate user tables**, and this
 
 | App | OAuth client | Local | Production |
 |---|---|---|---|
-| Storefront (via gateway) | `...6paebbjvpk...` | `http://localhost:7000/api/v1/user/auth/google/callback` | `https://api-gateway-uwnd.onrender.com/api/v1/user/auth/google/callback` |
-| AuthShield (direct) | `...cn48pr91cg...` | `http://localhost:5000/auth/google/callback` | `https://auth-service-0g7e.onrender.com/auth/google/callback` |
+| Storefront (via gateway) | `...6paebbjvpk...` | `http://localhost:7000/api/v1/user/auth/google/callback` | `https://trendy-gateway-ppa6nvipwa-pd.a.run.app/api/v1/user/auth/google/callback` |
+| AuthShield (direct) | `...cn48pr91cg...` | `http://localhost:5000/auth/google/callback` | `https://trendy-auth-ppa6nvipwa-pd.a.run.app/auth/google/callback` |
 
 The redirect URI is a **backend** URL — that is where the code-for-token exchange happens, because that is the only place the client secret lives. The SPA's own `/auth/google/callback` route is where the *backend* sends the browser afterwards; it must never be registered with Google.
 
@@ -328,15 +332,41 @@ The redirect URI is a **backend** URL — that is where the code-for-token excha
 | Storefront | `http://localhost:3001` | `https://ecommerce-test-qvvv.vercel.app` |
 | AuthShield | `http://localhost:3002` | `https://ecommerce-test-lemon-xi.vercel.app` |
 
-Then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in both `Users/.env` and `Auth/server/.env` (and in the matching Render service env for production). Each service gets **its own** client's ID/secret plus its own redirect URI from the table above. Set all three or none — a partially configured client aborts boot in production.
+Then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in both `Users/.env` and `Auth/server/.env` for local development. In production, the client IDs and redirect URIs are Cloud Run environment variables while the Google client secrets are injected from Google Secret Manager. Each service gets **its own** client's ID/secret plus its own redirect URI from the table above. Set all three or none — a partially configured client aborts boot in production.
 
-> **The storefront's redirect URI must point at the gateway, not at Users directly.** The SPA reaches Users through the gateway, so the OAuth round-trip has to end on the gateway's origin — otherwise the `user_google_oauth_state` cookie and the session cookies are set on a hostname the SPA never sends cookies to. Locally this is invisible (`localhost:7000` and `localhost:7001` share one cookie jar); on Render they are separate hosts and sign-in fails with `google_state_invalid`.
+> **The storefront's redirect URI must point at the gateway, not at Users directly.** The SPA reaches Users through the gateway, so the OAuth round-trip has to end on the gateway's origin — otherwise the `user_google_oauth_state` cookie and the session cookies are set on a hostname the SPA never sends cookies to. Locally this is invisible (`localhost:7000` and `localhost:7001` share one cookie jar); in production the Cloud Run services use separate hosts, so sending the callback directly to Users would fail with `google_state_invalid`.
 
 An email that already has a **password** account cannot be claimed via Google (`?error=email_already_registered`) — that guard exists on both services so nobody can take over an account by registering the matching Google address.
 
 ---
 
-## 10. Running locally
+## 10. Production deployment
+
+Production is split between **Vercel** for the two React SPAs and **Google Cloud Run** for all five backend services.
+
+| Component | Production URL |
+|---|---|
+| Storefront | `https://ecommerce-test-qvvv.vercel.app` |
+| AuthShield | `https://ecommerce-test-lemon-xi.vercel.app` |
+| API Gateway | `https://trendy-gateway-ppa6nvipwa-pd.a.run.app` |
+| Users | `https://trendy-users-ppa6nvipwa-pd.a.run.app` |
+| Auth server | `https://trendy-auth-ppa6nvipwa-pd.a.run.app` |
+| Amazon provider | `https://trendy-amazon-ppa6nvipwa-pd.a.run.app` |
+| Walmart provider | `https://trendy-walmart-ppa6nvipwa-pd.a.run.app` |
+
+All Cloud Run services run in Toronto (`northamerica-northeast2`). Source deployments build each service's Dockerfile with **Cloud Build** and store the resulting images in **Artifact Registry**.
+
+Production secrets are stored in **Google Secret Manager** and injected into Cloud Run revisions. Each backend has its own runtime service account with access only to the secrets it needs. The shared `INTERNAL_AUTH_SECRET` is intentionally common across the five backends, and Auth's `JWT_PROVIDER_SECRET` is the same value exposed to Amazon/Walmart as `SECRET`.
+
+The current deployment keeps `--max-instances 1` while rate-limit counters, replay protection, and provider-token caches are in memory. Before scaling horizontally, move those shared-state concerns to Redis or another centralized store.
+
+The scheduled price-snapshot workflow in `.github/workflows/snapshot-tracked-prices.yml` calls the Cloud Run gateway every six hours using the GitHub Actions `GATEWAY_URL` and `INTERNAL_AUTH_SECRET` repository secrets.
+
+For the full deployment/runbook, see [`CLOUD_RUN_DEPLOYMENT.md`](CLOUD_RUN_DEPLOYMENT.md).
+
+---
+
+## 11. Running locally
 
 ### What you need
 
@@ -424,7 +454,7 @@ Each one returns `{ "status": "ok", "mongoState": 1 }`. To trace a single reques
 
 ---
 
-## 11. Testing
+## 12. Testing
 
 The Auth server has the most complete test suite:
 
@@ -439,7 +469,7 @@ The other services currently have placeholder test scripts. The next CI investme
 
 ---
 
-## 12. Documentation map
+## 13. Documentation map
 
 This README is the overview. Deeper docs live in [`docs/`](docs/):
 

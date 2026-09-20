@@ -4,8 +4,8 @@
 # for products buyers track but don't actively view.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
-#   GATEWAY_URL           — base URL of the deployed gateway, e.g.
-#                           https://trendy-treasures-gateway.onrender.com
+#   GATEWAY_URL           — base URL of the deployed Cloud Run gateway:
+#                           https://trendy-gateway-ppa6nvipwa-pd.a.run.app
 #                           (no trailing slash)
 #   INTERNAL_AUTH_SECRET  — must match the gateway's INTERNAL_AUTH_SECRET
 #

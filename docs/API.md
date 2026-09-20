@@ -6,7 +6,7 @@ This is the **operational** reference — it shows what you can actually call an
 
 ## Conventions
 
-- `<gateway>` = your API Gateway URL (for example, `https://api-gateway-uwnd.onrender.com`)
+- `<gateway>` = your API Gateway URL (production: `https://trendy-gateway-ppa6nvipwa-pd.a.run.app`)
 - `<users>`, `<auth>`, `<amazon>`, `<walmart>` = direct service URLs, mostly used for debugging or internal calls
 - Shopper and admin routes should normally be called through the gateway with the prefix `/api/v1/user`.
 - All `curl` examples include `-c cookies.txt -b cookies.txt` so cookies persist across calls. State-changing requests need an `x-csrf-token` header after the first `/csrf-token` call.

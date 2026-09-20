@@ -21,12 +21,12 @@
 | Asset | Where it lives | What happens if we lose it |
 |---|---|---|
 | **Provider access tokens** (`creds.access_token`) | Gateway DB + 60s memory cache | Attacker can read provider catalogs as TrendyTreasures until the token expires (1h) or `active_jti` rotates. |
-| **`GATEWAY_PRIVATE_KEY`** | Only in the gateway's env vars | Attacker can sign new gateway assertions and refresh tokens at will. Effectively unlimited access until we rotate the keypair. |
-| **`JWT_PROVIDER_SECRET`** | Only in the Auth server's env vars | Attacker can forge provider JWTs that Amazon and Walmart will accept. |
-| **`INTERNAL_AUTH_SECRET`** | Every service's env | Attacker can call internal endpoints (price-drop notify, checkout-complete, token-cache flush, active-jti introspect). Bypasses CSRF and admin gates on those routes. |
+| **`GATEWAY_PRIVATE_KEY`** | Google Secret Manager → Gateway runtime env | Attacker can sign new gateway assertions and refresh tokens at will. Effectively unlimited access until we rotate the keypair. |
+| **`JWT_PROVIDER_SECRET`** | Google Secret Manager → Auth/Amazon/Walmart runtime env | Attacker can forge provider JWTs that Amazon and Walmart will accept. |
+| **`INTERNAL_AUTH_SECRET`** | Google Secret Manager → all five backend runtime envs | Attacker can call internal endpoints (price-drop notify, checkout-complete, token-cache flush, active-jti introspect). Bypasses CSRF and admin gates on those routes. |
 | **Shopper / admin / developer passwords** | bcrypt hashes in MongoDB | Credential stuffing if users reuse passwords elsewhere. |
 | **Shopper PII** (email, name, cart) | `users`, `cart`, `checkoutIntent` collections | Email harvesting + visibility into cart contents. |
-| **Stripe API key** | In each provider's env | Real-money payment intents, refund manipulation. |
+| **Stripe API key** | Google Secret Manager → provider runtime env | Real-money payment intents, refund manipulation. |
 
 ### Who we worry about
 
@@ -37,14 +37,14 @@
 | **Authenticated shopper** | A valid user session | Read another user's cart or orders (IDOR); underpay; access admin routes |
 | **Authenticated admin** | A valid admin session | Anything inside their authority is fine. Out of scope unless they escalate beyond TrendyTreasures itself. |
 | **Malicious developer** | A `clients` row in Auth | Steal another developer's API credential; SSRF against internal services via `redirect_uri` |
-| **Insider with environment access** | Can read env vars on Render or Vercel | Pivot to user data; mint tokens; impersonate services |
+| **Insider with cloud configuration access** | Can read Vercel build config or over-privileged Google Cloud/Secret Manager data | Pivot to user data; mint tokens; impersonate services |
 | **Stripe-malicious buyer** | Tampering with the Stripe.js flow client-side | Underpay; replay a successful PaymentIntent against multiple orders |
 
 ### Things we deliberately don't try to protect against
 
 - Someone physically stealing the deployer's laptop.
 - Supply-chain compromise of npm or PyPI packages (a real risk, but we mitigate by running `npm audit` regularly, not by adding custom controls).
-- Render, Vercel, Atlas, or Stripe being compromised themselves.
+- Google Cloud, Vercel, Atlas, Stripe, Brevo, or OpenAI being compromised themselves.
 
 ---
 
@@ -69,7 +69,7 @@ STRIDE is a checklist invented at Microsoft: **S**poofing, **T**ampering, **R**e
 | T1 | Browser tampers with the PaymentIntent amount | Money | Amazon and Walmart `/orders/place` retrieve the PaymentIntent from Stripe and check that `amount_received` matches the subtotal recomputed from `checkoutIntent.items` | None — the server is the source of truth |
 | T2 | Browser tampers with cart prices in localStorage (guest cart) | Provider catalog integrity | Server re-fetches product prices through the gateway when computing the checkout subtotal | None |
 | T3 | Browser tampers with the admin role in a JWT | Admin access | JWT signature is verified with `JWT_SECRET`; `role` claim must equal `Admin` | Only as strong as the secrecy of `JWT_SECRET` |
-| T4 | Attacker modifies `creds.access_token` directly in the database | Provider tokens | DB access requires Atlas credentials. With a `0.0.0.0/0` allowlist (common in early prod), this effectively reduces to "keep DB credentials secret." Tighten with an IP allowlist or VPC peering. | High if the DB is publicly reachable |
+| T4 | Attacker modifies `creds.access_token` directly in the database | Provider tokens | DB access requires Atlas credentials. The current Cloud Run deployment uses public Atlas connectivity, so credential secrecy/TLS are critical. Harden with static Cloud Run egress plus a narrow Atlas IP allowlist. | Higher than a private-network design while Atlas accepts broad public ingress |
 
 ### 2.3 Repudiation — claiming you didn't do something you did
 
@@ -178,7 +178,7 @@ This maps the 2021 OWASP Top 10 to the actual controls in the code.
 | # | Risk | Status | Controls |
 |---|---|---|---|
 | A01 | Broken Access Control | **OK with one gap** | JWT-signed sessions; admin role check on every admin route; cart owner derived from the session, not the body (E3 mitigated). **Gap:** no audit log for sensitive admin actions (R3). |
-| A02 | Cryptographic Failures | **OK** | bcrypt for passwords (cost 10 for shoppers, 12 for developers); HS256 JWTs with secrets at least 32 chars (enforced on prod boot); RS256 keypair for gateway assertions; TLS terminated at the Render/Vercel edge; secrets never logged. |
+| A02 | Cryptographic Failures | **OK** | bcrypt for passwords (cost 10 for shoppers, 12 for developers); HS256 JWTs with secrets at least 32 chars (enforced on prod boot); RS256 keypair for gateway assertions; HTTPS terminated by Cloud Run/Vercel; production secrets stored in Google Secret Manager and never logged. |
 | A03 | Injection | **OK** | Mongoose and MongoEngine parameterize queries; no raw `$where`. Body parsers have size caps. No `eval` or `Function(string)`. EJS templates use `<%=` (escaped) for user-supplied values. |
 | A04 | Insecure Design | **Partially addressed** | The OAuth-style authorize flow uses a one-shot client secret, short-lived `temp_clients` rows, and JTI rotation. **Gap:** `temp_clients` is deleted before the upstream Auth call succeeds (`Users/Middlewares/authenticate.js:36`), so a network blip leaves the user re-entering creds. |
 | A05 | Security Misconfiguration | **OK** | `helmet` defaults on every Express service; CSP with form-action allowlist on Auth; `requireProdEnv` boot check fails fast if any prod env var is missing; `NODE_ENV=production` controls secure-cookie behavior. |
@@ -301,7 +301,7 @@ These are written down because pretending they don't exist is the actual securit
 
 **Fix:** bootstrap-with-token. Generate a one-time bootstrap token at deploy time (e.g. as an env var), require it on the first registration, and allow open creation only after that. Once the first admin exists, the token is irrelevant.
 
-**Status:** tracked. Today we mitigate it by registering the first admin immediately after deploy (the curl-bootstrap pattern in [`README.md` section 10](../README.md#10-running-locally)).
+**Status:** tracked. Today we mitigate it by registering the first admin immediately after deploy (the curl-bootstrap pattern in [`README.md` section 11](../README.md#11-running-locally)).
 
 ---
 

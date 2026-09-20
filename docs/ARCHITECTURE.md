@@ -69,7 +69,7 @@ The aggregator-with-handoff design is better than two natural alternatives:
 
 ## 2. Container view (one level deeper)
 
-The platform is made up of **seven** deployable pieces, split across three trust domains. The gateway is the only public entry point for the storefront's API traffic — everything behind it is internal.
+The platform is made up of **seven** deployable pieces, split across three trust domains. The gateway is the storefront's public API entry point. Auth is also public because AuthShield talks to it directly, and Amazon/Walmart are public because they host the branded checkout pages. All five backends currently run as public Cloud Run services with application-level authentication and rate limiting.
 
 ```mermaid
 flowchart TB
@@ -82,7 +82,7 @@ flowchart TB
         authSpa["Auth SPA<br/><i>React 18</i>"]
     end
 
-    subgraph backend["Backend Services (Render)"]
+    subgraph backend["Backend Services (Google Cloud Run)"]
         direction TB
         gateway["API Gateway<br/><i>Node + Express</i>"]
         subgraph internal[" "]
@@ -544,7 +544,7 @@ Each service in one page: what it does, key files, dependencies, and things to w
 - **CSRF setup:** [client/src/utils.js](../client/src/utils.js) wraps `fetch` in a helper called `apiFetch`. It fetches a CSRF token from `GET /api/v1/user/csrf-token` before the first state-changing request, captures any rotated tokens from response bodies, and retries with a fresh token if a request returns 403.
 - **Refresh on 401:** `apiFetch` watches for 401s, calls `POST /api/v1/user/auth/refresh`, and retries the original request once.
 - **Guest cart:** users who aren't logged in get a cart stored in `localStorage`. When they log in, it's merged into the server cart.
-- **Two cookie domains:** the storefront SPA lives on Vercel (`*.vercel.app`) and the API lives on Render (`*.onrender.com`). These are different registrable domains, so `document.cookie` can't read the CSRF cookie. To work around that, the server also returns the token in the response body, and `apiFetch` caches it in memory.
+- **Two cookie domains:** the storefront SPA lives on Vercel (`*.vercel.app`) and the API lives on Google Cloud Run (`*.run.app`). These are different registrable domains, so `document.cookie` can't read the CSRF cookie. To work around that, the server also returns the token in the response body, and `apiFetch` caches it in memory.
 
 ### 4.7 Auth SPA (`Auth/client/`)
 
@@ -571,7 +571,7 @@ Three different refresh stories because the threat models are different. See [`S
 
 ### 5.2 CSRF strategy
 
-We use the **double-submit cookie pattern**, adapted for cross-domain (`*.vercel.app` ↔ `*.onrender.com`):
+We use the **double-submit cookie pattern**, adapted for cross-domain (`*.vercel.app` ↔ `*.run.app`):
 
 1. When the SPA starts → `GET /csrf-token` → server sets a `csrfToken` cookie **and** returns the same value in the response body.
 2. The SPA caches the body value in memory (because cross-domain code can't read the cookie).
@@ -602,7 +602,7 @@ Per-service, in-memory rate limits via `express-rate-limit`:
 | Provider general | 120/min | Mirrors the gateway |
 | Provider payments | 20/min | Stripe round-trips cost money if abused |
 
-These limits are **per-instance**. Horizontal scaling effectively multiplies the budget. For real production rate limiting, use Redis or a CDN/WAF layer.
+These limits are **per-instance**. The current Cloud Run deployment caps each backend at one instance so the configured limits and in-memory replay/cache semantics remain exact. Before horizontal scaling, move the shared counters/caches to Redis or another centralized store.
 
 ### 5.5 Request correlation
 
@@ -621,13 +621,13 @@ To trace a single browser request through all five services, grep for the `x-req
 flowchart TB
     browser([Browser])
 
-    subgraph CDN["Vercel CDN"]
+    subgraph CDN["Vercel"]
         direction LR
         clientStatic["Storefront SPA"]
-        authClientStatic["Auth SPA"]
+        authClientStatic["AuthShield SPA"]
     end
 
-    subgraph Render["Render — containerized services"]
+    subgraph CloudRun["Google Cloud Run — northamerica-northeast2"]
         direction TB
         gw["API Gateway"]
         subgraph svcs[" "]
@@ -637,6 +637,13 @@ flowchart TB
             amazon["Amazon Provider"]
             walmart["Walmart Provider"]
         end
+    end
+
+    subgraph GoogleInfra["Google Cloud platform services"]
+        direction LR
+        secrets["Secret Manager"]
+        build["Cloud Build"]
+        registry["Artifact Registry"]
     end
 
     subgraph Atlas["MongoDB Atlas"]
@@ -655,23 +662,30 @@ flowchart TB
         google["Google OAuth"]
     end
 
+    github["GitHub Actions<br/>6-hour snapshots"]
+
     browser ==> CDN
     browser ==>|cookies| gw
     browser ==>|cookies| authsrv
     browser ==> amazon
     browser ==> walmart
-
     gw --> users
     gw --> amazon
     gw --> walmart
     gw --> authsrv
-
     users --> trendytreasures
     gw --> trendytreasures
     authsrv --> authdb
     amazon --> amazondb
     walmart --> walmartdb
-
+    secrets -.-> gw
+    secrets -.-> users
+    secrets -.-> authsrv
+    secrets -.-> amazon
+    secrets -.-> walmart
+    build --> registry
+    registry -.-> CloudRun
+    github --> gw
     amazon --> stripe
     walmart --> stripe
     users --> brevo
@@ -682,21 +696,33 @@ flowchart TB
     style svcs fill:none,stroke:none
 ```
 
-**Reading the diagram.** Bold arrows are browser-originated HTTPS traffic. Thin arrows are server-to-server and database calls.
+**Reading the diagram.** Bold arrows are browser-originated HTTPS traffic. Thin arrows are server-to-server/database/API calls. Dotted arrows represent platform configuration or image/secret delivery.
 
-**Why we picked these hosts:**
+**Current production platform:**
 
-- **Vercel for SPAs** — static files on a CDN with instant rollbacks.
-- **Render for backends** — one container per service; works the same way for Node and Python.
-- **Atlas for data** — managed MongoDB; for real production, lock it down with a network allowlist or VPC peering.
-- **Stripe for payments** — test mode in dev; production keys touch real money.
-- **Brevo for email** — generous free tier (300/day), works around the fact that Render's free tier blocks outbound SMTP.
+- **Vercel for SPAs** — CDN-hosted React builds.
+- **Cloud Run for backends** — one container per service in `northamerica-northeast2`.
+- **Secret Manager** — production runtime secrets are injected into Cloud Run; each backend has a dedicated runtime service account.
+- **Cloud Build + Artifact Registry** — source deployments build and store container images before Cloud Run creates a revision.
+- **Atlas for data** — managed MongoDB. Current connectivity is public; stronger hardening would add static Cloud Run egress and a narrow Atlas IP allowlist.
+- **Stripe for payments** — test mode for the portfolio deployment.
+- **Brevo for email** — HTTPS transactional mail for OTP/recovery/alerts.
+- **GitHub Actions** — calls `/internal/snapshot-tracked` every six hours using repository secrets.
 
-**Things we'd add for mature production:**
+**Current Cloud Run operational choices:**
 
-- Redis (or similar) for cross-instance caches — the token cache, refresh lock, AI cache, and active-jti cache.
-- A CDN/WAF in front of the gateway (Cloudflare is partially in place via Render).
-- Private networking between Render services (right now each service is publicly reachable, with `INTERNAL_AUTH_SECRET` as the only gate).
-- A managed secret store (right now secrets are env vars set in the Render dashboard).
+- All five backends use `DEPLOYMENT_PLATFORM=cloud-run`.
+- All five currently use `--max-instances 1` because rate-limit counters, replay protection, and several caches are in memory.
+- The services use `--allow-unauthenticated` while application-level auth, CORS, and rate limiting enforce the current trust boundaries.
+- Gateway, Users, Amazon, Walmart, and Auth each have a dedicated runtime service account.
+- Gateway/Users share the storefront MongoDB database; Auth, Amazon, and Walmart each have their own database.
 
-For production hardening, the first investments are Redis-backed cross-instance caches, a managed secret store, and private networking between Render services.
+**Next hardening steps:**
+
+- Move cross-instance counters/caches/replay state to Redis before increasing instance counts.
+- Use IAM-authenticated service-to-service calls and/or private ingress for services that do not need direct browser access.
+- Give Cloud Run a static egress IP through VPC + Cloud NAT, then restrict Atlas Network Access.
+- Put an external HTTPS load balancer + Cloud Armor in front of the gateway if stronger edge controls are needed.
+- Add centralized log-based alerts for authentication, payment, and security events.
+
+See [`../CLOUD_RUN_DEPLOYMENT.md`](../CLOUD_RUN_DEPLOYMENT.md) for the production runbook.
