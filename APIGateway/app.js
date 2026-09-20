@@ -508,11 +508,42 @@ const forwardHeaders = (proxyReq, req) => {
     }
 };
 
+// A 429 can arrive from three different places and they need opposite
+// responses, so label which one it was.
+//
+// This gateway's own limiter sets RateLimit-* headers on requests it
+// *allows*. When an upstream then answers 429, those headers are still on
+// the response, so DevTools shows "429" next to "ratelimit-remaining: 59"
+// and it looks like we throttled a request we actually let through. The
+// giveaway is the body: our limiters answer JSON, while Render's edge
+// answers plain text.
+const labelUpstreamThrottle = (proxyRes, req) => {
+    if (proxyRes.statusCode !== 429) return;
+    const contentType = String(proxyRes.headers['content-type'] || '');
+    const fromEdge = !contentType.includes('json') && !proxyRes.headers['ratelimit-limit'];
+    proxyRes.headers['x-ratelimit-source'] = fromEdge ? 'upstream-edge' : 'upstream-app';
+    console.warn(
+        `[gateway] [${req.requestId}] ✗ upstream 429 for ${req.method} ${req.path} ` +
+        `source=${fromEdge ? 'render/cloudflare edge (not our limiter)' : 'upstream app limiter'} ` +
+        `target=${USERS_TARGET}`
+    );
+};
+
 app.use('/api/v1/user', createProxyMiddleware({
     target: USERS_TARGET,
     changeOrigin: true,
     pathRewrite: { '^/api/v1/user': '/' },
-    onProxyReq: forwardHeaders
+    // http-proxy-middleware v3 reads event handlers from `on` only. The
+    // v2-style top-level `onProxyReq` / `onProxyRes` keys are silently
+    // ignored (they're translated solely by legacyCreateProxyMiddleware,
+    // which this file doesn't use), so forwardHeaders never actually ran:
+    // Users received no x-real-client-ip and bucketed every shopper under
+    // this gateway's single egress IP, and no x-request-id meant gateway and
+    // Users logs couldn't be correlated.
+    on: {
+        proxyReq: forwardHeaders,
+        proxyRes: labelUpstreamThrottle
+    }
 }));
 
 // Product routes use the custom proxy (above) so we can refresh + retry on
