@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { FaPaperPlane, FaRobot, FaUser } from 'react-icons/fa';
-import { askProductQuestion } from '../utils';
+import { askProductQuestion, apiErrorMessage } from '../utils';
 
 const SUGGESTED = [
     'Is this good for everyday use?',
@@ -62,7 +62,12 @@ function ProductQAChat({ provider, productId, productName, productDescription, p
                 if (res.ok && res.success) {
                     last.a = res.answer;
                 } else {
-                    last.error = res.message || 'Could not get an answer. Try again.';
+                    // Same fix as PriceAdvisorWidget: a throttled or
+                    // edge-rejected request carries no JSON body, so the old
+                    // `res.message ||` fallback always won and "Try again"
+                    // was advice the shopper couldn't act on.
+                    console.warn('[client] product Q&A failed', res.status, res.message || '');
+                    last.error = apiErrorMessage(res, 'Could not get an answer. Try again.');
                 }
             }
             return next;

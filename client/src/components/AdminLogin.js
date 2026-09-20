@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaArrowRight, FaUserShield } from 'react-icons/fa';
-import { handleError, handleSuccess, apiFetch } from '../utils';
+import { handleError, handleSuccess, apiFetch, readApiError } from '../utils';
 import AuthLayout from './AuthLayout';
 
 function AdminLogin() {
@@ -27,18 +27,24 @@ function AdminLogin() {
                 body: JSON.stringify(loginInfo),
             });
 
-            const result = await response.json();
-            const { success, message, error } = result;
-            if (success) {
+            if (!response.ok) {
+                // Status-driven so a rejected password always reads as a
+                // rejected password. Parsing the body first meant a throttled
+                // request (which never reached the password check at all)
+                // reported whatever its body happened to contain.
+                handleError(await readApiError(response, 'Login failed'));
+                return;
+            }
+
+            const result = await response.json().catch(() => ({}));
+            if (result.success) {
                 handleSuccess('Login successful');
                 setTimeout(() => navigate('/admin/dashboard'), 800);
-            } else if (error) {
-                handleError(error.details[0].message);
             } else {
-                handleError(message);
+                handleError(result.message || 'Login failed');
             }
         } catch (err) {
-            handleError(err.message);
+            handleError(err.message || 'Login failed');
         } finally {
             setSubmitting(false);
         }

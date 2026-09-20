@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { FaArrowRight, FaGoogle } from 'react-icons/fa';
-import { handleError, handleSuccess, API_BASE, apiFetch, googleErrorMessage } from '../utils';
+import { handleError, handleSuccess, API_BASE, apiFetch, googleErrorMessage, readApiError } from '../utils';
 import AuthLayout from './AuthLayout';
 import FormErrorBanner from './FormErrorBanner';
 
@@ -46,15 +46,19 @@ function Signin() {
                 body: JSON.stringify(loginInfo),
             });
 
-            const result = await response.json();
-            const { success, message, error } = result;
-            if (success) {
-                handleSuccess(message);
+            if (!response.ok) {
+                // Same reasoning as AdminLogin: branch on status, not on the
+                // shape of a body that may not even be JSON.
+                handleError(await readApiError(response, 'Login failed'));
+                return;
+            }
+
+            const result = await response.json().catch(() => ({}));
+            if (result.success) {
+                handleSuccess(result.message);
                 setTimeout(() => navigate('/home'), 800);
-            } else if (error) {
-                handleError(error?.details?.[0]?.message || 'Login failed');
             } else {
-                handleError(message);
+                handleError(result.message || 'Login failed');
             }
         } catch (err) {
             handleError(err.message || 'Login failed');

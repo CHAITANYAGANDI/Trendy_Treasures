@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FaRobot } from 'react-icons/fa';
-import { fetchPriceAdvice } from '../utils';
+import { fetchPriceAdvice, apiErrorMessage } from '../utils';
 
 // Compact "buy now or wait?" tile that sits next to the price history
 // chart. Reads the same price_snapshots data the chart does, runs it
@@ -22,7 +22,18 @@ function PriceAdvisorWidget({ provider, productId }) {
                 // error branch so they're visible.
                 setState({ loading: false, disabled: true });
             } else {
-                setState({ loading: false, error: res.message || 'Could not load advice.' });
+                // Was `res.message || 'Could not load advice.'`, but a
+                // throttled or edge-rejected request has no JSON body at all,
+                // so it always fell through to the hardcoded string and told
+                // the shopper nothing about why or whether to retry.
+                // Shoppers get a clean sentence; the reason code the server
+                // sent ("AI advice unavailable: upstream_error") stays in the
+                // console where it's actually useful.
+                console.warn('[client] price advice failed', res.status, res.message || '');
+                setState({
+                    loading: false,
+                    error: apiErrorMessage(res, 'Could not load advice.')
+                });
             }
         });
         return () => { cancelled = true; };

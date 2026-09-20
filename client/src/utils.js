@@ -117,6 +117,79 @@ export const handleError = (input) => {
     dispatchToast(friendly, 'error');
 };
 
+// ─── Failed-response reader ────────────────────────────────────────────────
+//
+// Turns any non-OK API response into exactly one sentence a user can act on.
+//
+// Callers used to do `await response.json()` and then branch on the body
+// alone. Two things went wrong with that:
+//
+//   1. Not every failure has a JSON body. A 429 from Render/Cloudflare's edge
+//      is plain text ("Too Many Requests"), so `response.json()` throws a
+//      SyntaxError whose own message *quotes the response body* — e.g.
+//      `Unexpected token 'T', "Too Many Requests" is not valid JSON`. Passing
+//      that to friendlyError() matched the /too many requests/ pattern, so a
+//      rate-limit toast appeared for whatever the user had just done.
+//   2. Our rate limiters answer `{ error: '<string>' }` while Joi answers
+//      `{ error: { details: [...] } }`. Code reaching straight for
+//      `error.details[0].message` throws on the former.
+//
+// Status is checked before anything body-derived: an HTTP status is
+// unambiguous, a body is not.
+const STATUS_MESSAGES = {
+    408: 'That took too long. Please try again.',
+    429: 'Too many attempts. Please wait a minute and try again.',
+    502: 'This service is temporarily unavailable. Please try again shortly.',
+    503: 'This service is temporarily unavailable. Please try again shortly.',
+    504: 'That took too long. Please try again.'
+};
+
+/**
+ * Map an already-parsed `{ status, message?, error? }` result to one sentence.
+ * Status is consulted first on purpose — it's unambiguous, whereas a body may
+ * be absent, plain text, or shaped differently by whichever layer rejected
+ * the request (our limiters use `error`, Joi uses `error.details`, our
+ * controllers use `message`).
+ */
+export const apiErrorMessage = (
+    result = {},
+    fallback = 'Something went wrong. Please try again.'
+) => {
+    const { status, message, error } = result;
+
+    if (status === 0) {
+        return "Can't reach the server right now. Please try again in a moment.";
+    }
+    if (STATUS_MESSAGES[status]) return STATUS_MESSAGES[status];
+    if (status >= 500) return 'Something went wrong on our end. Please try again.';
+
+    // Joi validation: { error: { details: [{ message }] } }
+    const joi = error && error.details && error.details[0] ? error.details[0].message : null;
+    if (joi) return friendlyError(joi);
+
+    if (typeof message === 'string' && message) return friendlyError(message);
+    if (typeof error === 'string' && error) return friendlyError(error);
+
+    return fallback;
+};
+
+export const readApiError = async (
+    response,
+    fallback = 'Something went wrong. Please try again.'
+) => {
+    let body = null;
+    try {
+        // Read as text first so a non-JSON body can never throw here.
+        const raw = await response.text();
+        if (raw) body = JSON.parse(raw);
+    } catch {
+        body = null;
+    }
+
+    // Spread the body first so `status` always comes from the response.
+    return apiErrorMessage({ ...(body || {}), status: response.status }, fallback);
+};
+
 export const handleCartClick = (navigate) => {
     navigate('/cart');
 };
