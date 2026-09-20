@@ -5,8 +5,12 @@
 // ephemeral port, and we drive it with global fetch. No supertest, no new
 // dependencies.
 //
-// Each test uses a unique CF-Connecting-IP so buckets can't bleed between
-// tests — clientIp() prefers that header, which is also what production does.
+// Each test uses a unique X-Forwarded-For so buckets can't bleed between
+// tests. The throwaway app sets `trust proxy` from the same platform preset
+// production uses, so with DEPLOYMENT_PLATFORM=cloud-run (one trusted hop)
+// req.ip resolves to that header's value — exactly how Cloud Run's front end
+// presents the caller. This also covers "Cloud-Run-style forwarded requests
+// resolve to a stable client identity" without hard-coding any Google IP.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,6 +18,7 @@ const http = require('node:http');
 const express = require('express');
 
 const { installRateLimiters } = require('../middleware/rateLimiters');
+const { trustProxySetting } = require('../middleware/clientIdentity');
 
 const GENERAL_MAX = 3;
 const AUTH_MAX = 2;
@@ -22,7 +27,8 @@ const CSRF_MAX = 2;
 const TEST_ENV = {
     RATE_LIMIT_PER_MIN: String(GENERAL_MAX),
     AUTH_RATE_LIMIT_PER_15M: String(AUTH_MAX),
-    CSRF_RATE_LIMIT_PER_MIN: String(CSRF_MAX)
+    CSRF_RATE_LIMIT_PER_MIN: String(CSRF_MAX),
+    DEPLOYMENT_PLATFORM: 'cloud-run'
 };
 
 // Spin up an isolated app per test so limiter state never carries over.
@@ -37,6 +43,10 @@ const startServer = async ({ storefrontUrl = '' } = {}) => {
         req.requestId = `req-${(n += 1)}`;
         next();
     });
+
+    // Same proxy-trust policy app.js installs, so req.ip is derived from
+    // X-Forwarded-For the way it is in production.
+    app.set('trust proxy', trustProxySetting(TEST_ENV));
 
     installRateLimiters(app, {
         env: TEST_ENV,
@@ -56,7 +66,7 @@ const startServer = async ({ storefrontUrl = '' } = {}) => {
         fetch(`http://127.0.0.1:${port}${path}`, {
             method,
             redirect: 'manual',
-            headers: { 'cf-connecting-ip': ip, ...headers }
+            headers: { 'x-forwarded-for': ip, ...headers }
         });
 
     // `fetch` (undici) treats Sec-Fetch-* as forbidden headers and forces
@@ -65,7 +75,7 @@ const startServer = async ({ storefrontUrl = '' } = {}) => {
     const rawCall = (path, { method = 'GET', ip = '203.0.113.1', headers = {} } = {}) =>
         new Promise((resolve, reject) => {
             const req = http.request(
-                { host: '127.0.0.1', port, path, method, headers: { 'cf-connecting-ip': ip, ...headers } },
+                { host: '127.0.0.1', port, path, method, headers: { 'x-forwarded-for': ip, ...headers } },
                 (res) => {
                     let body = '';
                     res.on('data', (c) => { body += c; });
@@ -248,7 +258,7 @@ test('rejection is logged with limiter name, method, path, ip and request id', a
         assert.match(line, /\[req-\d+\]/);
 
         // Nothing secret leaks into the log line.
-        assert.doesNotMatch(line, /cf-connecting-ip|authorization|secret|cookie/i);
+        assert.doesNotMatch(line, /authorization|secret|cookie|internal-auth/i);
     } finally {
         await s.close();
     }

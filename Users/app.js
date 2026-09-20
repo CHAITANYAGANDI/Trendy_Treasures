@@ -19,6 +19,11 @@ const AccountRouter = require('./Routes/AccountRouter');
 const PriceRouter = require('./Routes/PriceRouter');
 const AIRouter = require('./Routes/AIRouter');
 const { issueCsrfToken, requireCsrf } = require('./Middlewares/csrf');
+const {
+    clientIdentityKey,
+    trustProxySetting,
+    describePlatform
+} = require('./Middlewares/clientIdentity');
 
 
 const app = express();
@@ -78,9 +83,10 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3001')
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Trust the first proxy hop. Required for express-rate-limit to bucket by
-// the real client IP behind Render/Heroku/Nginx instead of the LB's IP.
-app.set('trust proxy', process.env.TRUST_PROXY || (isProduction ? 1 : 'loopback'));
+// Proxy trust comes from the platform preset rather than a hard-coded hop
+// count, so the same image runs on Cloud Run, on Render and locally.
+// See Middlewares/clientIdentity.js.
+app.set('trust proxy', trustProxySetting(process.env));
 
 
 app.use((req, res, next) => {
@@ -116,37 +122,17 @@ const isInternalRoute = (req) => req.path.startsWith('/internal/');
 // Requests proxied by the APIGateway all arrive from the gateway's single
 // egress IP, so keying on req.ip alone put every shopper into one bucket and
 // 429'd the storefront under trivial load. The gateway forwards the real
-// client IP alongside the shared internal secret; trust it only when that
-// secret verifies, so a caller reaching this service directly cannot forge
-// another shopper's key.
-const { timingSafeEqual } = require('crypto');
-
-const timingSafeEq = (a, b) => {
-    const left = Buffer.from(String(a || ''));
-    const right = Buffer.from(String(b || ''));
-    return left.length === right.length && timingSafeEqual(left, right);
-};
-
-const rateLimitKey = (req) => {
-    try {
-        const secret = process.env.INTERNAL_AUTH_SECRET;
-        const provided = req.headers['x-internal-auth'];
-        const realIp = req.headers['x-real-client-ip'];
-        if (secret && provided && realIp && timingSafeEq(provided, secret)) {
-            return `gw:${realIp}`;
-        }
-    } catch {
-        // Fall through to the default per-IP key.
-    }
-    // Reached when this service is hit directly rather than via the gateway.
-    // Prefer CF-Connecting-IP: Render fronts *.onrender.com with Cloudflare,
-    // so req.ip resolves to a proxy address from a shared pool (two proxy
-    // hops, not the one `trust proxy` assumes) and would bucket unrelated
-    // callers together. Cloudflare overwrites this header, so it can't be
-    // forged from outside.
-    // ipKeyGenerator normalises an IPv6 address into a subnet key.
-    return ipKeyGenerator(req.headers['cf-connecting-ip'] || req.ip);
-};
+// client IP alongside the shared internal secret; the resolver below trusts
+// it only when that secret verifies with a timing-safe comparison, so a
+// caller reaching this service directly cannot forge another shopper's key.
+// That matters during the Cloud Run migration, where this service stays
+// publicly reachable.
+//
+// `normalize` keeps this service's existing IPv6 subnet behaviour —
+// express-rate-limit v8's ipKeyGenerator — rather than the resolver's /64
+// default, so bucket semantics don't change.
+const rateLimitKey = (req) =>
+    clientIdentityKey(req, { normalize: (ip) => ipKeyGenerator(ip) });
 
 const generalLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -232,6 +218,9 @@ app.use('/ai', AIRouter);
 app.post('/internal/price-drop', PriceRouter.internalPriceDrop);
 
 
+// Host is intentionally omitted: Node then binds all interfaces, which is
+// what Cloud Run requires. PORT is supplied by the platform at runtime.
 app.listen(PORT, () => {
     console.log(`[users] listening on ${PORT}`);
+    console.log(`[users] client-identity: ${describePlatform(process.env)}`);
 });

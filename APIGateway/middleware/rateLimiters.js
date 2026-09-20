@@ -20,6 +20,7 @@
 // express app without booting app.js (which listens and opens Mongo).
 
 const rateLimit = require('express-rate-limit');
+const { resolveClientIp, clientIdentityKey, normalizeIp } = require('./clientIdentity');
 
 const AUTH_LIMITED_PATHS = [
     '/api/v1/user/auth/login',
@@ -31,25 +32,19 @@ const AUTH_LIMITED_PATHS = [
 
 const CSRF_TOKEN_PATH = '/api/v1/user/csrf-token';
 
-// Collapse an IPv6 address to its /64 prefix. A single residential IPv6
-// allocation is usually a /64 or larger, so without this an attacker just
-// walks the low bits to get a fresh bucket per request. express-rate-limit
-// ships an `ipKeyGenerator` helper that does this, but it isn't exported by
-// the v7 line pinned here, so it's inlined.
-const normalizeIp = (ip) => {
-    const raw = String(ip || 'unknown');
-    if (!raw.includes(':')) return raw;
-    return `${raw.split(':').slice(0, 4).join(':')}::/64`;
-};
+// Client identity comes from the portable resolver — see
+// middleware/clientIdentity.js for the trust order and why an edge header is
+// only honoured on a platform that declares one.
+//
+// `trustGatewayHeader: false` because this IS the gateway: it is the public
+// entry point and has no upstream of its own whose headers it should
+// believe. Downstream services pass true so they can accept the
+// authenticated x-real-client-ip this service forwards to them.
+const GATEWAY_IDENTITY = { trustGatewayHeader: false };
 
-// Render fronts every *.onrender.com host with Cloudflare, so a request
-// crosses two proxy layers and any fixed `trust proxy` hop count resolves
-// req.ip to a proxy address from a rotating pool. Cloudflare sets
-// CF-Connecting-IP to the true client address and overwrites whatever the
-// caller sent, so behind Render it is both accurate and unspoofable.
-const clientIp = (req) => req.headers['cf-connecting-ip'] || req.ip;
+const clientIp = (req) => resolveClientIp(req, GATEWAY_IDENTITY).ip;
 
-const clientIpKey = (req) => normalizeIp(clientIp(req));
+const clientIpKey = (req) => clientIdentityKey(req, GATEWAY_IDENTITY);
 
 // Mirrors Express's own mount semantics: exact match, or a deeper path.
 const pathMatches = (reqPath, base) => reqPath === base || reqPath.startsWith(`${base}/`);
@@ -94,7 +89,14 @@ const createRateLimiters = ({
     storefrontUrl = '',
     logger = console
 } = {}) => {
-    const base = { standardHeaders: true, legacyHeaders: false, keyGenerator: clientIpKey };
+    // Bind the identity resolver to the injected env, so the platform preset
+    // (and therefore which headers are trusted) is configurable per instance
+    // rather than read from process.env deep inside the key function. Tests
+    // rely on this to exercise each platform.
+    const identityOpts = { env, trustGatewayHeader: false };
+    const keyGenerator = (req) => clientIdentityKey(req, identityOpts);
+
+    const base = { standardHeaders: true, legacyHeaders: false, keyGenerator };
 
     // Named so the log says which budget ran out. Without that, a 429 in
     // production is indistinguishable between "this shopper browsed a lot"
@@ -103,7 +105,7 @@ const createRateLimiters = ({
     const onLimitExceeded = (limiterName) => (req, res, next, options) => {
         logger.warn(
             `[gateway] [${req.requestId || '-'}] ✗ ${limiterName} rejected ` +
-            `${req.method} ${req.path} ip=${clientIpKey(req)}`
+            `${req.method} ${req.path} ip=${keyGenerator(req)}`
         );
         // Answering a navigation with JSON strands the user on a raw error
         // page. Every other sign-in failure redirects to /login?error=<code>;

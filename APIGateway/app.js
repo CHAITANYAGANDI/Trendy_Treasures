@@ -5,6 +5,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const cors = require('cors');
 const helmet = require('helmet');
 const { installRateLimiters, clientIp } = require('./middleware/rateLimiters');
+const { trustProxySetting, describePlatform } = require('./middleware/clientIdentity');
 const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
 const jwt = require('jsonwebtoken');
@@ -134,17 +135,16 @@ installRateLimiters(app, {
 });
 
 
-// Trust-proxy: must NOT be `true` because express-rate-limit (correctly)
-// refuses to run if any client can spoof their IP via X-Forwarded-For.
-// This still governs req.protocol/req.secure and the req.ip fallback used
-// when CF-Connecting-IP is missing, so keep it at the real hop count.
+// Proxy trust comes from the platform preset rather than a hard-coded hop
+// count, so the same image runs on Cloud Run (one Google front end), on
+// Render (Cloudflare + Render's router) and locally. See
+// middleware/clientIdentity.js. Never `true`: that trusts the left-most
+// X-Forwarded-For entry, which any caller can write, and express-rate-limit
+// correctly refuses to run with it.
 //
-// Note: overriding TRUST_PROXY=loopback in a deployed environment makes
-// req.ip the socket peer — i.e. Render's router — which puts all traffic in
-// one bucket. The env examples used to suggest exactly that; don't set it in
-// production. Rate limiting no longer depends on this being right, because
-// the limiters key on CF-Connecting-IP (see clientIp above).
-app.set('trust proxy', process.env.TRUST_PROXY || (isProduction ? 2 : 'loopback'));
+// This governs req.protocol / req.secure and the req.ip the limiters fall
+// back to, so it matters even where an edge header is available.
+app.set('trust proxy', trustProxySetting(process.env));
 
 app.use((req, res, next) => {
     req.headers['x-original-url'] = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
@@ -513,10 +513,14 @@ const forwardHeaders = (proxyReq, req) => {
 //
 // This gateway's own limiter sets RateLimit-* headers on requests it
 // *allows*. When an upstream then answers 429, those headers are still on
-// the response, so DevTools shows "429" next to "ratelimit-remaining: 59"
-// and it looks like we throttled a request we actually let through. The
-// giveaway is the body: our limiters answer JSON, while Render's edge
-// answers plain text.
+// the response, so a reader sees "429" next to "ratelimit-remaining: 59" and
+// concludes we throttled a request we actually let through.
+//
+// The distinguishing signal is the response shape, not the hosting provider:
+// every limiter in this codebase answers JSON and sets RateLimit-*, so a
+// plain-text 429 with neither came from infrastructure in front of the
+// upstream app. We report that as `upstream-edge` without naming a vendor —
+// we can tell it wasn't the app, not who produced it.
 const labelUpstreamThrottle = (proxyRes, req) => {
     if (proxyRes.statusCode !== 429) return;
     const contentType = String(proxyRes.headers['content-type'] || '');
@@ -524,7 +528,7 @@ const labelUpstreamThrottle = (proxyRes, req) => {
     proxyRes.headers['x-ratelimit-source'] = fromEdge ? 'upstream-edge' : 'upstream-app';
     console.warn(
         `[gateway] [${req.requestId}] ✗ upstream 429 for ${req.method} ${req.path} ` +
-        `source=${fromEdge ? 'render/cloudflare edge (not our limiter)' : 'upstream app limiter'} ` +
+        `source=${fromEdge ? 'platform-edge (no RateLimit-* and non-JSON body — not an app limiter)' : 'upstream-app limiter'} ` +
         `target=${USERS_TARGET}`
     );
 };
@@ -612,6 +616,11 @@ app.post('/internal/snapshot-tracked', async (req, res) => {
 });
 
 
+// Host is intentionally omitted: Node then binds all interfaces, which is
+// what Cloud Run requires. PORT is supplied by the platform at runtime.
 app.listen(PORT, () => {
     console.log(`[gateway] API Gateway running on port ${PORT}`);
+    // Log the resolved identity policy — a wrong DEPLOYMENT_PLATFORM is
+    // otherwise invisible until rate limiting misbehaves.
+    console.log(`[gateway] client-identity: ${describePlatform(process.env)}`);
 });

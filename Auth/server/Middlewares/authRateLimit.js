@@ -6,18 +6,20 @@
 // For account-bound endpoints we also key on the submitted username/email
 // so an attacker can't dodge by rotating IPs.
 //
-// The IP portion comes from CF-Connecting-IP rather than req.ip. Render
-// fronts *.onrender.com with Cloudflare, so a request crosses two proxy
-// layers and any fixed `trust proxy` hop count resolves req.ip to a proxy
-// address from a shared pool — which both lumps unrelated users into one
-// bucket and lets an attacker ride a bucket they don't own. Cloudflare
-// overwrites CF-Connecting-IP, so it can't be forged from outside.
+// The IP portion comes from the portable resolver in
+// Middlewares/clientIdentity.js, not from a single hard-coded header. It
+// trusts, in order: an authenticated x-real-client-ip from our own gateway,
+// a platform edge header only where the deployment declares one, then
+// req.ip from an explicit trust-proxy hop count. Reading a caller-supplied
+// header unconditionally would be a free rate-limit bypass on a platform
+// that doesn't strip it.
 //
 // We route the IP portion of every key through `ipKeyGenerator` so IPv6
 // subnet normalization is applied (/56 by default) — otherwise an attacker
 // on IPv6 could just walk the low bits to dodge per-IP limits.
 
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const { clientIdentityKey } = require('./clientIdentity');
 
 // `ipKeyGenerator` takes an IP *string*. It used to be called here as
 // `ipKeyGenerator(req, res)`, which returned the request object unchanged
@@ -25,7 +27,7 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 // so every request got its own bucket and these limiters never fired. The
 // account-bound keys below interpolated that object into a template, which
 // stringifies to a constant, so they silently keyed on the username alone.
-const ipKey = (req) => ipKeyGenerator(req.headers['cf-connecting-ip'] || req.ip);
+const ipKey = (req) => clientIdentityKey(req, { normalize: (ip) => ipKeyGenerator(ip) });
 
 const ipAndBodyKey = (field) => (req) => {
     const ip = ipKey(req);

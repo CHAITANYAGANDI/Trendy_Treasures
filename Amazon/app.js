@@ -8,11 +8,16 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 const path = require('path');
-const { randomUUID, timingSafeEqual } = require('crypto');
+const { randomUUID } = require('crypto');
 
 const ProductRouter = require('./Routes/ProductRouter');
 const OrderRouter = require('./Routes/OrderRouter');
 const PaymentRouter = require('./Routes/PaymentRouter');
+const {
+    clientIdentityKey,
+    trustProxySetting,
+    describePlatform
+} = require('./Middlewares/clientIdentity');
 
 
 const app = express();
@@ -44,9 +49,10 @@ require('./Models/dbConnection');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Trust the first proxy hop so express-rate-limit buckets by the real
-// client IP behind Render/Heroku/Nginx, not the LB's IP.
-app.set('trust proxy', process.env.TRUST_PROXY || (isProduction ? 1 : 'loopback'));
+// Proxy trust comes from the platform preset rather than a hard-coded hop
+// count, so the same image runs on Cloud Run, on Render and locally.
+// See Middlewares/clientIdentity.js.
+app.set('trust proxy', trustProxySetting(process.env));
 
 
 app.use((req, res, next) => {
@@ -71,51 +77,21 @@ app.use(helmet({
 }));
 
 
-// Service-level rate limit. Amazon is publicly reachable on Render unless
-// it's on private networking, so the gateway's IP limit alone isn't
-// sufficient. /payments/* gets a tighter window because each call hits
-// Stripe and costs money on abuse.
+// Service-level rate limit. Amazon stays publicly reachable during the
+// Cloud Run migration, so the gateway's own IP limit is not sufficient on
+// its own. /payments/* gets a tighter window because each call hits Stripe
+// and costs money on abuse.
+//
 // Every request proxied by the APIGateway arrives from the gateway's single
 // egress IP, so keying purely on req.ip lumped all shoppers into one bucket
-// and 429'd the storefront under trivial load. The gateway sends the real
-// client IP together with the shared internal secret; trust that IP only
-// when the secret verifies, so a caller hitting this service directly
-// cannot forge someone else's key.
-const timingSafeEq = (a, b) => {
-    const left = Buffer.from(String(a || ''));
-    const right = Buffer.from(String(b || ''));
-    return left.length === right.length && timingSafeEqual(left, right);
-};
-
-// Collapse an IPv6 address to its /64 prefix, so an attacker can't walk the
-// low bits of their allocation for a fresh bucket per request.
-// express-rate-limit's `ipKeyGenerator` helper isn't exported by the v7 line
-// pinned here, so it's inlined; Users/ and Auth/ use the helper directly.
-const normalizeIp = (ip) => {
-    const raw = String(ip || 'unknown');
-    if (!raw.includes(':')) return raw;
-    return raw.split(':').slice(0, 4).join(':') + '::/64';
-};
-
-const rateLimitKey = (req) => {
-    try {
-        const secret = process.env.INTERNAL_AUTH_SECRET;
-        const provided = req.headers['x-internal-auth'];
-        const realIp = req.headers['x-real-client-ip'];
-        if (secret && provided && realIp && timingSafeEq(provided, secret)) {
-            return `gw:${realIp}`;
-        }
-    } catch {
-        // Fall through to the default per-IP key.
-    }
-    // Reached when this service is hit directly rather than via the gateway.
-    // Prefer CF-Connecting-IP: Render fronts *.onrender.com with Cloudflare,
-    // so req.ip resolves to a proxy address from a shared pool (two proxy
-    // hops, not the one `trust proxy` assumes) and would bucket unrelated
-    // callers together. Cloudflare overwrites this header, so it can't be
-    // forged from outside.
-    return normalizeIp(req.headers['cf-connecting-ip'] || req.ip);
-};
+// and 429'd the storefront under trivial load. The resolver trusts the
+// gateway's x-real-client-ip only when x-internal-auth verifies with a
+// timing-safe comparison, so a caller reaching this service directly cannot
+// forge someone else's key. See Middlewares/clientIdentity.js.
+//
+// The resolver's default /64 IPv6 normalisation matches what this service
+// did before (express-rate-limit v7 doesn't export ipKeyGenerator).
+const rateLimitKey = (req) => clientIdentityKey(req);
 
 app.use(rateLimit({
     windowMs: 60 * 1000,
@@ -200,6 +176,9 @@ app.use('/payments', PaymentRouter);
 app.use('/', ProductRouter);
 
 
+// Host is intentionally omitted: Node then binds all interfaces, which is
+// what Cloud Run requires. PORT is supplied by the platform at runtime.
 app.listen(PORT, () => {
     console.log(`[amazon] listening on ${PORT}`);
+    console.log(`[amazon] client-identity: ${describePlatform(process.env)}`);
 });

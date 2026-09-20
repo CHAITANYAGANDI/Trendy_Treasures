@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "test": "node --test tests/tokenManager.test.js tests/rateLimiters.test.js tests/proxyOptions.test.js"
+    "test": "node --test tests/tokenManager.test.js tests/rateLimiters.test.js tests/proxyOptions.test.js tests/clientIdentity.test.js"
   },
   "author": "",
   "license": "ISC",

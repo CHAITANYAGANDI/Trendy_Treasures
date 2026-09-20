@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { ipKey } = require('./Middlewares/authRateLimit');
+const { trustProxySetting, describePlatform } = require('./Middlewares/clientIdentity');
 const { randomUUID } = require('crypto');
 
 const { validateEnv } = require('./utils/env');
@@ -30,13 +31,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 const isDev = !isProduction;
 const localhostRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
-// Render fronts *.onrender.com with Cloudflare, so a request crosses two
-// proxy layers (Cloudflare edge, then Render's router) before Express sees
-// it — hence 2, not 1. With 1, `req.ip` resolved to a Cloudflare edge
-// address drawn from a shared pool, which bucketed unrelated users together.
-// Rate limiting no longer depends on this being exactly right (the limiters
-// key on CF-Connecting-IP), but req.protocol/req.secure still do.
-app.set('trust proxy', 2);
+// Proxy trust comes from the platform preset rather than a hard-coded hop
+// count, so the same image runs on Cloud Run (one Google front end), on
+// Render (Cloudflare + Render's router) and locally. This service is also
+// called directly by the Auth Shield frontend, so it must resolve browser
+// client IPs correctly on whichever platform hosts it.
+// See Middlewares/clientIdentity.js.
+app.set('trust proxy', trustProxySetting(process.env));
 
 // Reject UUIDs that don't look like UUIDs/short tokens — otherwise the
 // header is a log-injection vector since we echo it in responses and logs.
@@ -99,9 +100,10 @@ const internalTokenLimiter = rateLimit({
     max: parseInt(process.env.INTERNAL_TOKEN_RATE_LIMIT_PER_MIN || '600', 10),
     standardHeaders: true,
     legacyHeaders: false,
-    // Same CF-Connecting-IP keying as everything else. Gateway traffic over
-    // Render's internal network carries no Cloudflare header and falls back
-    // to req.ip, which is correct: it really is one internal caller.
+    // Same identity resolution as everything else. Service-to-service
+    // callers (gateway, Amazon, Walmart) present no x-real-client-ip, so
+    // they fall through to req.ip — correct, since they really are one
+    // internal caller each and are already gated cryptographically.
     keyGenerator: ipKey,
     message: { success: false, message: 'Too many token requests, slow down.' }
 });
@@ -209,8 +211,14 @@ app.use((err, req, res, next) => {
 // a test runner we just want the configured Express app — no listener,
 // no signal hooks, no process.exit on rejection.
 if (require.main === module) {
+    // Host is intentionally omitted: Node then binds all interfaces, which
+    // is what Cloud Run requires. PORT is supplied by the platform.
     const server = app.listen(PORT, () => {
         logger.info('listening', { port: PORT });
+        // Surface the resolved identity policy — a wrong
+        // DEPLOYMENT_PLATFORM is otherwise invisible until rate limiting
+        // misbehaves.
+        logger.info('client_identity', { policy: describePlatform(process.env) });
     });
 
     // Graceful shutdown — let in-flight requests finish, then close Mongo.

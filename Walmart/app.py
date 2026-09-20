@@ -1,4 +1,3 @@
-import hmac
 import json
 import os
 import uuid
@@ -23,14 +22,30 @@ is_production = (
     or os.environ.get('NODE_ENV') == 'production'
 )
 
-# Behind Render/Heroku/Nginx the real client IP is in X-Forwarded-For.
-# Without this, flask-limiter would bucket every request by the LB's IP.
-# Render fronts *.onrender.com with Cloudflare, so a request crosses two
-# proxy layers (Cloudflare edge, then Render's router) — hence x_for=2.
-# rate_limit_key() no longer depends on this being exactly right, since it
-# reads CF-Connecting-IP first, but it still governs url_for/HTTPS detection.
+# Behind any reverse proxy the real client IP is in X-Forwarded-For; without
+# ProxyFix, flask-limiter would bucket every request by the proxy's address.
+#
+# The hop count comes from the platform preset rather than being hard-coded
+# to Render's topology, so the same image runs on Cloud Run (one Google
+# front end), on Render (Cloudflare + Render's router) and locally, where no
+# forwarded header is trusted at all. x_proto/x_host stay at 1 so url_for()
+# and HTTPS detection work behind Cloud Run's TLS-terminating front end.
+# See Middlewares/client_identity.py.
 from werkzeug.middleware.proxy_fix import ProxyFix
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_proto=1, x_host=1)
+from Middlewares.client_identity import (
+    client_identity_key,
+    proxy_fix_hops,
+    describe_platform,
+)
+
+app.wsgi_app = ProxyFix(
+    app.wsgi_app, x_for=proxy_fix_hops(), x_proto=1, x_host=1
+)
+
+# Logged at import time, not under __main__, because the production
+# entrypoint is gunicorn. A wrong DEPLOYMENT_PLATFORM is otherwise invisible
+# until rate limiting misbehaves.
+print('[walmart] client-identity: %s' % describe_platform())
 
 
 # ─── Security headers (Talisman) ───────────────────────────────────────
@@ -50,33 +65,18 @@ Talisman(
 
 
 # ─── Rate limiting (Flask-Limiter) ─────────────────────────────────────
-# Walmart is publicly reachable on Render unless put on private
-# networking, so the gateway's IP limit isn't sufficient on its own.
-# /payments/* gets a tighter window because each call hits Stripe and
-# costs money on abuse.
-
+# Walmart stays publicly reachable during the Cloud Run migration, so the
+# gateway's own IP limit isn't sufficient on its own. /payments/* gets a
+# tighter window because each call hits Stripe and costs money on abuse.
+#
 # Every request proxied by the APIGateway arrives from the gateway's single
 # egress IP, so keying purely on the remote address lumped all shoppers into
-# one bucket and 429'd the storefront under trivial load. The gateway sends
-# the real client IP together with the shared internal secret; trust that IP
-# only when the secret verifies, so a caller hitting this service directly
-# cannot forge someone else's key.
+# one bucket and 429'd the storefront under trivial load. The resolver trusts
+# the gateway's x-real-client-ip only when x-internal-auth verifies with a
+# constant-time comparison, so a caller reaching this service directly cannot
+# forge someone else's key. See Middlewares/client_identity.py.
 def rate_limit_key():
-    try:
-        secret = os.environ.get('INTERNAL_AUTH_SECRET')
-        provided = request.headers.get('x-internal-auth')
-        real_ip = request.headers.get('x-real-client-ip')
-        if secret and provided and real_ip and hmac.compare_digest(provided, secret):
-            return f'gw:{real_ip}'
-    except Exception:
-        pass
-    # Reached when this service is hit directly rather than via the gateway.
-    # Prefer CF-Connecting-IP: Render fronts *.onrender.com with Cloudflare,
-    # so the remote address resolves to a proxy drawn from a shared pool
-    # (two proxy hops, not the one ProxyFix assumes) and would bucket
-    # unrelated callers together. Cloudflare overwrites this header, so it
-    # cannot be forged from outside.
-    return request.headers.get('cf-connecting-ip') or get_remote_address()
+    return client_identity_key(request, get_remote_address)
 
 
 limiter = Limiter(
