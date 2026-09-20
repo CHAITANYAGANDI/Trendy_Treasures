@@ -654,9 +654,10 @@ export const mergeGuestCart = async () => {
 export default handleCartClick;
 
 
-// Human-readable copy for the ?error=<code> values the Users service
-// appends to /login when a Google sign-in round-trip fails. Keep in sync
-// with Users/Routes/GoogleAuthRouter.js.
+// Human-readable copy for the ?error=<code> values appended to /login when a
+// Google sign-in round-trip fails. Keep in sync with
+// Users/Routes/GoogleAuthRouter.js, plus `rate_limited` which the APIGateway
+// adds when it throttles the navigation before Users ever sees it.
 export const GOOGLE_ERROR_MESSAGES = {
     google_unconfigured: 'Google sign-in is not set up on this deployment yet.',
     google_cancelled: 'Google sign-in was cancelled.',
@@ -665,7 +666,12 @@ export const GOOGLE_ERROR_MESSAGES = {
     google_email_unverified: 'Your Google email address is not verified.',
     email_already_registered:
         'That email already has a password account here. Sign in with your password instead.',
-    google_failed: 'Google sign-in failed. Please try again.'
+    google_failed: 'Google sign-in failed. Please try again.',
+    // The gateway redirects here when a sign-in navigation is rate-limited.
+    // Without this the banner would read the generic "Google sign-in failed",
+    // which sends people back to click the button again — the one thing that
+    // keeps the limiter closed.
+    rate_limited: 'Too many sign-in attempts. Please wait a minute, then try again.'
 };
 
 export const googleErrorMessage = (code) =>

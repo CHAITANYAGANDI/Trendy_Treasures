@@ -149,6 +149,37 @@ const clientIpKey = (req) => normalizeIp(clientIp(req));
 // costs nothing to serve and shouldn't eat a shopper's request budget.
 const isHealthRoute = (req) => req.path === '/health';
 
+// Where to send a throttled browser navigation. Falls back to the first
+// configured CORS origin, which is the storefront.
+const STOREFRONT_URL = (process.env.CLIENT_URL || allowedOrigins[0] || '').replace(/\/+$/, '');
+
+// A top-level navigation asks for HTML and is not a cross-origin fetch.
+// `/api/v1/user/auth/google` is reached by submitting a GET form, so the
+// browser is *navigating* — there is no JS waiting to read a JSON body.
+const isBrowserNavigation = (req) =>
+    req.method === 'GET' &&
+    String(req.headers.accept || '').includes('text/html') &&
+    req.headers['sec-fetch-mode'] !== 'cors';
+
+// Answering a navigation with `{"error":"Too many requests"}` strands the
+// user on a raw JSON page with no way back. Every other Google sign-in
+// failure redirects to /login?error=<code> (see Users/Routes/
+// GoogleAuthRouter.js) — a throttled request was the one path that didn't,
+// because the limiter short-circuits before that router ever runs. Send it
+// to the same place so the login page can explain itself; XHR callers still
+// get the JSON body they expect.
+//
+// Always /login: the only navigations reaching this gateway are the OAuth
+// start and callback, both shopper-facing. Admin sign-in is an XHR POST and
+// takes the JSON branch.
+const onLimitExceeded = (req, res, next, options) => {
+    if (STOREFRONT_URL && isBrowserNavigation(req)) {
+        console.warn(`[gateway] [${req.requestId}] rate-limited navigation ${req.originalUrl} — redirecting to login`);
+        return res.redirect(`${STOREFRONT_URL}/login?error=rate_limited`);
+    }
+    return res.status(options.statusCode).send(options.message);
+};
+
 const generalLimiter = rateLimit({
     windowMs: 1 * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_PER_MIN || '120', 10),
@@ -156,6 +187,7 @@ const generalLimiter = rateLimit({
     legacyHeaders: false,
     keyGenerator: clientIpKey,
     skip: isHealthRoute,
+    handler: onLimitExceeded,
     message: { error: 'Too many requests, slow down.' }
 });
 
@@ -165,6 +197,7 @@ const authLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: clientIpKey,
+    handler: onLimitExceeded,
     message: { error: 'Too many auth attempts. Try again later.' }
 });
 
