@@ -25,10 +25,12 @@ is_production = (
 
 # Behind Render/Heroku/Nginx the real client IP is in X-Forwarded-For.
 # Without this, flask-limiter would bucket every request by the LB's IP.
-# `x_for=1` trusts exactly one proxy hop — tighten/loosen if the topology
-# changes.
+# Render fronts *.onrender.com with Cloudflare, so a request crosses two
+# proxy layers (Cloudflare edge, then Render's router) — hence x_for=2.
+# rate_limit_key() no longer depends on this being exactly right, since it
+# reads CF-Connecting-IP first, but it still governs url_for/HTTPS detection.
 from werkzeug.middleware.proxy_fix import ProxyFix
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_proto=1, x_host=1)
 
 
 # ─── Security headers (Talisman) ───────────────────────────────────────
@@ -68,7 +70,13 @@ def rate_limit_key():
             return f'gw:{real_ip}'
     except Exception:
         pass
-    return get_remote_address()
+    # Reached when this service is hit directly rather than via the gateway.
+    # Prefer CF-Connecting-IP: Render fronts *.onrender.com with Cloudflare,
+    # so the remote address resolves to a proxy drawn from a shared pool
+    # (two proxy hops, not the one ProxyFix assumes) and would bucket
+    # unrelated callers together. Cloudflare overwrites this header, so it
+    # cannot be forged from outside.
+    return request.headers.get('cf-connecting-ip') or get_remote_address()
 
 
 limiter = Limiter(

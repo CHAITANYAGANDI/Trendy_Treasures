@@ -78,7 +78,11 @@ app.use((req, res, next) => {
     const id = req.headers['x-request-id'] || randomUUID();
     req.requestId = id;
     res.setHeader('x-request-id', id);
-    console.log(`[gateway] [${id}] ${req.method} ${req.originalUrl}`);
+    // The rate-limit key is logged because getting it wrong is invisible
+    // until the storefront starts 429ing: if `ip=` shows the same address
+    // for unrelated shoppers, CF-Connecting-IP isn't arriving and they're
+    // all sharing one bucket.
+    console.log(`[gateway] [${id}] ${req.method} ${req.originalUrl} ip=${clientIp(req)}`);
     next();
 });
 
@@ -113,11 +117,44 @@ app.use(cors({
 
 
 // ─── Rate limiting (gateway-wide + extra-strict for auth) ──────────────────
+//
+// Do NOT key these on req.ip. Render fronts every *.onrender.com domain with
+// Cloudflare, so a request crosses two proxy layers (Cloudflare edge, then
+// Render's own router) before Express sees it. Any fixed `trust proxy` hop
+// count therefore lands on a *proxy* address drawn from a small pool rather
+// than the shopper's address, and every shopper behind that pool shares one
+// 120/min counter — four requests from one cold page load can 429.
+//
+// Cloudflare sets CF-Connecting-IP to the true client address and overwrites
+// whatever the caller sent, so behind Render it is both accurate and
+// unspoofable. Fall back to req.ip when it's absent (local dev, or a future
+// host without Cloudflare in front).
+const clientIp = (req) => req.headers['cf-connecting-ip'] || req.ip;
+
+// Collapse an IPv6 address to its /64 prefix. A single residential IPv6
+// allocation is usually a /64 or larger, so without this an attacker just
+// walks the low bits to get a fresh bucket per request. express-rate-limit
+// ships an `ipKeyGenerator` helper that does this, but it isn't exported by
+// the v7 line pinned here, so it's inlined. Users/ and Auth/ use the helper.
+const normalizeIp = (ip) => {
+    const raw = String(ip || 'unknown');
+    if (!raw.includes(':')) return raw;
+    return raw.split(':').slice(0, 4).join(':') + '::/64';
+};
+
+const clientIpKey = (req) => normalizeIp(clientIp(req));
+
+// Render pings /health on a schedule and uptime monitors tend to pile on. It
+// costs nothing to serve and shouldn't eat a shopper's request budget.
+const isHealthRoute = (req) => req.path === '/health';
+
 const generalLimiter = rateLimit({
     windowMs: 1 * 60 * 1000,
     max: parseInt(process.env.RATE_LIMIT_PER_MIN || '120', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: clientIpKey,
+    skip: isHealthRoute,
     message: { error: 'Too many requests, slow down.' }
 });
 
@@ -126,6 +163,7 @@ const authLimiter = rateLimit({
     max: parseInt(process.env.AUTH_RATE_LIMIT_PER_15M || '30', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: clientIpKey,
     message: { error: 'Too many auth attempts. Try again later.' }
 });
 
@@ -139,15 +177,15 @@ app.use('/api/v1/user/recovery', authLimiter);
 
 // Trust-proxy: must NOT be `true` because express-rate-limit (correctly)
 // refuses to run if any client can spoof their IP via X-Forwarded-For.
-// In local dev we trust loopback only; in prod Render/Heroku put exactly
-// one proxy in front, so trust one hop.
+// This still governs req.protocol/req.secure and the req.ip fallback used
+// when CF-Connecting-IP is missing, so keep it at the real hop count.
 //
-// This defaulted to 'loopback' in every environment, which meant that in
-// production req.ip resolved to the load balancer for EVERY request — so
-// express-rate-limit bucketed the entire internet into a single 120/min
-// counter and the storefront started 429ing under trivial load. Matches
-// Users/ and Amazon/, which already had the production default.
-app.set('trust proxy', process.env.TRUST_PROXY || (isProduction ? 1 : 'loopback'));
+// Note: overriding TRUST_PROXY=loopback in a deployed environment makes
+// req.ip the socket peer — i.e. Render's router — which puts all traffic in
+// one bucket. The env examples used to suggest exactly that; don't set it in
+// production. Rate limiting no longer depends on this being right, because
+// the limiters key on CF-Connecting-IP (see clientIp above).
+app.set('trust proxy', process.env.TRUST_PROXY || (isProduction ? 2 : 'loopback'));
 
 app.use((req, res, next) => {
     req.headers['x-original-url'] = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
@@ -511,9 +549,10 @@ const proxyProductRoute = (apiName, provider, target, prefix) => async (req, res
         // internet into one 120/min counter. Pass the real client IP along,
         // authenticated with the shared internal secret so that a caller
         // hitting Amazon/Walmart directly cannot forge a key.
-        if (process.env.INTERNAL_AUTH_SECRET && req.ip) {
+        const ip = clientIp(req);
+        if (process.env.INTERNAL_AUTH_SECRET && ip) {
             headers['x-internal-auth'] = process.env.INTERNAL_AUTH_SECRET;
-            headers['x-real-client-ip'] = req.ip;
+            headers['x-real-client-ip'] = ip;
         }
         return fetch(upstreamUrl, { method: req.method, headers });
     };
@@ -581,9 +620,10 @@ const forwardHeaders = (proxyReq, req) => {
     // Same reasoning as the product proxy: Users would otherwise rate-limit
     // every shopper under this gateway's egress IP. Authenticated with the
     // shared secret so it can't be forged by calling Users directly.
-    if (process.env.INTERNAL_AUTH_SECRET && req.ip) {
+    const ip = clientIp(req);
+    if (process.env.INTERNAL_AUTH_SECRET && ip) {
         proxyReq.setHeader('x-internal-auth', process.env.INTERNAL_AUTH_SECRET);
-        proxyReq.setHeader('x-real-client-ip', req.ip);
+        proxyReq.setHeader('x-real-client-ip', ip);
     }
 };
 

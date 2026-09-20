@@ -3,20 +3,32 @@
 // abuse; these stop targeted brute-force against a single account or
 // the OTP/reset mailbox.
 //
-// Keys default to req.ip (the real client IP once `app.set('trust proxy')`
-// is in place). For account-bound endpoints we also key on the
-// submitted username/email so an attacker can't dodge by rotating IPs.
+// For account-bound endpoints we also key on the submitted username/email
+// so an attacker can't dodge by rotating IPs.
+//
+// The IP portion comes from CF-Connecting-IP rather than req.ip. Render
+// fronts *.onrender.com with Cloudflare, so a request crosses two proxy
+// layers and any fixed `trust proxy` hop count resolves req.ip to a proxy
+// address from a shared pool — which both lumps unrelated users into one
+// bucket and lets an attacker ride a bucket they don't own. Cloudflare
+// overwrites CF-Connecting-IP, so it can't be forged from outside.
 //
 // We route the IP portion of every key through `ipKeyGenerator` so IPv6
-// /64-prefix normalization is applied (otherwise an attacker on IPv6
-// could just walk the lower 64 bits to dodge per-IP limits).
+// subnet normalization is applied (/56 by default) — otherwise an attacker
+// on IPv6 could just walk the low bits to dodge per-IP limits.
 
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
-const ipKey = (req, res) => ipKeyGenerator(req, res);
+// `ipKeyGenerator` takes an IP *string*. It used to be called here as
+// `ipKeyGenerator(req, res)`, which returned the request object unchanged
+// (it only rewrites IPv6 strings) — and MemoryStore keys a Map by identity,
+// so every request got its own bucket and these limiters never fired. The
+// account-bound keys below interpolated that object into a template, which
+// stringifies to a constant, so they silently keyed on the username alone.
+const ipKey = (req) => ipKeyGenerator(req.headers['cf-connecting-ip'] || req.ip);
 
-const ipAndBodyKey = (field) => (req, res) => {
-    const ip = ipKeyGenerator(req, res);
+const ipAndBodyKey = (field) => (req) => {
+    const ip = ipKey(req);
     const v = String((req.body && req.body[field]) || '').toLowerCase().trim();
     return `${ip}|${v}`;
 };
@@ -81,6 +93,7 @@ const refreshLimiter = rateLimit({
 });
 
 module.exports = {
+    ipKey,
     loginLimiter,
     forgotPasswordLimiter,
     resetPasswordLimiter,

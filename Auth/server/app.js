@@ -8,6 +8,7 @@ const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKey } = require('./Middlewares/authRateLimit');
 const { randomUUID } = require('crypto');
 
 const { validateEnv } = require('./utils/env');
@@ -29,11 +30,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 const isDev = !isProduction;
 const localhostRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
-// Trust the first proxy hop. Production runs behind a load balancer/CDN,
-// so without this `req.ip` would be the LB's IP and rate limits would
-// bucket everyone together. The default `1` accepts X-Forwarded-* from
-// exactly one upstream — tighten or loosen based on your topology.
-app.set('trust proxy', 1);
+// Render fronts *.onrender.com with Cloudflare, so a request crosses two
+// proxy layers (Cloudflare edge, then Render's router) before Express sees
+// it — hence 2, not 1. With 1, `req.ip` resolved to a Cloudflare edge
+// address drawn from a shared pool, which bucketed unrelated users together.
+// Rate limiting no longer depends on this being exactly right (the limiters
+// key on CF-Connecting-IP), but req.protocol/req.secure still do.
+app.set('trust proxy', 2);
 
 // Reject UUIDs that don't look like UUIDs/short tokens — otherwise the
 // header is a log-injection vector since we echo it in responses and logs.
@@ -101,6 +104,10 @@ app.use(rateLimit({
     max: 200,
     standardHeaders: true,
     legacyHeaders: false,
+    // Keyed on CF-Connecting-IP, not req.ip — see Middlewares/authRateLimit.js.
+    // At 200/15min this is the tightest global budget in the stack, so a
+    // shared proxy-IP bucket here locks users out fastest.
+    keyGenerator: ipKey,
     // Covered by internalTokenLimiter above — don't bill them twice.
     skip: isInternalTokenPath
 }));

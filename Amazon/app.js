@@ -87,6 +87,16 @@ const timingSafeEq = (a, b) => {
     return left.length === right.length && timingSafeEqual(left, right);
 };
 
+// Collapse an IPv6 address to its /64 prefix, so an attacker can't walk the
+// low bits of their allocation for a fresh bucket per request.
+// express-rate-limit's `ipKeyGenerator` helper isn't exported by the v7 line
+// pinned here, so it's inlined; Users/ and Auth/ use the helper directly.
+const normalizeIp = (ip) => {
+    const raw = String(ip || 'unknown');
+    if (!raw.includes(':')) return raw;
+    return raw.split(':').slice(0, 4).join(':') + '::/64';
+};
+
 const rateLimitKey = (req) => {
     try {
         const secret = process.env.INTERNAL_AUTH_SECRET;
@@ -98,7 +108,13 @@ const rateLimitKey = (req) => {
     } catch {
         // Fall through to the default per-IP key.
     }
-    return req.ip;
+    // Reached when this service is hit directly rather than via the gateway.
+    // Prefer CF-Connecting-IP: Render fronts *.onrender.com with Cloudflare,
+    // so req.ip resolves to a proxy address from a shared pool (two proxy
+    // hops, not the one `trust proxy` assumes) and would bucket unrelated
+    // callers together. Cloudflare overwrites this header, so it can't be
+    // forged from outside.
+    return normalizeIp(req.headers['cf-connecting-ip'] || req.ip);
 };
 
 app.use(rateLimit({

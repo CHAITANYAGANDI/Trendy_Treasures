@@ -138,8 +138,14 @@ const rateLimitKey = (req) => {
     } catch {
         // Fall through to the default per-IP key.
     }
+    // Reached when this service is hit directly rather than via the gateway.
+    // Prefer CF-Connecting-IP: Render fronts *.onrender.com with Cloudflare,
+    // so req.ip resolves to a proxy address from a shared pool (two proxy
+    // hops, not the one `trust proxy` assumes) and would bucket unrelated
+    // callers together. Cloudflare overwrites this header, so it can't be
+    // forged from outside.
     // ipKeyGenerator normalises an IPv6 address into a subnet key.
-    return ipKeyGenerator(req.ip);
+    return ipKeyGenerator(req.headers['cf-connecting-ip'] || req.ip);
 };
 
 const generalLimiter = rateLimit({

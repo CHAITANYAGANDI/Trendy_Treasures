@@ -1,0 +1,6 @@
+[mcp_servers.stitch]
+command = "cmd.exe"
+args = [
+    "/c",
+    'C:\Users\chait\stitch-claude-proxy.cmd',
+]
