@@ -10,6 +10,13 @@ function RefreshHandler({ setIsAuthenticated }) {
 
 
     useEffect(() => {
+        // Admin routes have their own session owner (RequireAdmin →
+        // fetchCurrentAdmin). Probing the *shopper* session here as well
+        // added a second, useless round trip on every admin navigation, and
+        // it can never authenticate an admin anyway. Nothing below this
+        // applies to /admin/*: the redirect targets are shopper pages.
+        if (location.pathname.startsWith('/admin')) return undefined;
+
         let cancelled = false;
         fetchCurrentUser().then((user) => {
             if (cancelled) return;

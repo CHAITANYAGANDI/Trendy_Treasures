@@ -4,7 +4,7 @@ const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { installRateLimiters, clientIp } = require('./middleware/rateLimiters');
 const mongoose = require('mongoose');
 const { randomUUID } = require('crypto');
 const jwt = require('jsonwebtoken');
@@ -117,96 +117,21 @@ app.use(cors({
 }));
 
 
-// ─── Rate limiting (gateway-wide + extra-strict for auth) ──────────────────
+// ─── Rate limiting ─────────────────────────────────────────────────────────
 //
-// Do NOT key these on req.ip. Render fronts every *.onrender.com domain with
-// Cloudflare, so a request crosses two proxy layers (Cloudflare edge, then
-// Render's own router) before Express sees it. Any fixed `trust proxy` hop
-// count therefore lands on a *proxy* address drawn from a small pool rather
-// than the shopper's address, and every shopper behind that pool shares one
-// 120/min counter — four requests from one cold page load can 429.
+// Policy (three non-overlapping budgets, IP keying, preflight/health skips,
+// rejection logging) lives in middleware/rateLimiters.js so it can be tested
+// against a real express app without booting this file.
 //
-// Cloudflare sets CF-Connecting-IP to the true client address and overwrites
-// whatever the caller sent, so behind Render it is both accurate and
-// unspoofable. Fall back to req.ip when it's absent (local dev, or a future
-// host without Cloudflare in front).
-const clientIp = (req) => req.headers['cf-connecting-ip'] || req.ip;
-
-// Collapse an IPv6 address to its /64 prefix. A single residential IPv6
-// allocation is usually a /64 or larger, so without this an attacker just
-// walks the low bits to get a fresh bucket per request. express-rate-limit
-// ships an `ipKeyGenerator` helper that does this, but it isn't exported by
-// the v7 line pinned here, so it's inlined. Users/ and Auth/ use the helper.
-const normalizeIp = (ip) => {
-    const raw = String(ip || 'unknown');
-    if (!raw.includes(':')) return raw;
-    return raw.split(':').slice(0, 4).join(':') + '::/64';
-};
-
-const clientIpKey = (req) => normalizeIp(clientIp(req));
-
-// Render pings /health on a schedule and uptime monitors tend to pile on. It
-// costs nothing to serve and shouldn't eat a shopper's request budget.
-const isHealthRoute = (req) => req.path === '/health';
-
-// Where to send a throttled browser navigation. Falls back to the first
+// Where to send a throttled browser navigation: falls back to the first
 // configured CORS origin, which is the storefront.
 const STOREFRONT_URL = (process.env.CLIENT_URL || allowedOrigins[0] || '').replace(/\/+$/, '');
 
-// A top-level navigation asks for HTML and is not a cross-origin fetch.
-// `/api/v1/user/auth/google` is reached by submitting a GET form, so the
-// browser is *navigating* — there is no JS waiting to read a JSON body.
-const isBrowserNavigation = (req) =>
-    req.method === 'GET' &&
-    String(req.headers.accept || '').includes('text/html') &&
-    req.headers['sec-fetch-mode'] !== 'cors';
-
-// Answering a navigation with `{"error":"Too many requests"}` strands the
-// user on a raw JSON page with no way back. Every other Google sign-in
-// failure redirects to /login?error=<code> (see Users/Routes/
-// GoogleAuthRouter.js) — a throttled request was the one path that didn't,
-// because the limiter short-circuits before that router ever runs. Send it
-// to the same place so the login page can explain itself; XHR callers still
-// get the JSON body they expect.
-//
-// Always /login: the only navigations reaching this gateway are the OAuth
-// start and callback, both shopper-facing. Admin sign-in is an XHR POST and
-// takes the JSON branch.
-const onLimitExceeded = (req, res, next, options) => {
-    if (STOREFRONT_URL && isBrowserNavigation(req)) {
-        console.warn(`[gateway] [${req.requestId}] rate-limited navigation ${req.originalUrl} — redirecting to login`);
-        return res.redirect(`${STOREFRONT_URL}/login?error=rate_limited`);
-    }
-    return res.status(options.statusCode).send(options.message);
-};
-
-const generalLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000,
-    max: parseInt(process.env.RATE_LIMIT_PER_MIN || '120', 10),
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: clientIpKey,
-    skip: isHealthRoute,
-    handler: onLimitExceeded,
-    message: { error: 'Too many requests, slow down.' }
+installRateLimiters(app, {
+    env: process.env,
+    storefrontUrl: STOREFRONT_URL,
+    logger: console
 });
-
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: parseInt(process.env.AUTH_RATE_LIMIT_PER_15M || '30', 10),
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: clientIpKey,
-    handler: onLimitExceeded,
-    message: { error: 'Too many auth attempts. Try again later.' }
-});
-
-app.use(generalLimiter);
-app.use('/api/v1/user/auth/login', authLimiter);
-app.use('/api/v1/user/auth/signup', authLimiter);
-app.use('/api/v1/user/auth/verifyotp', authLimiter);
-app.use('/api/v1/user/admin/login', authLimiter);
-app.use('/api/v1/user/recovery', authLimiter);
 
 
 // Trust-proxy: must NOT be `true` because express-rate-limit (correctly)

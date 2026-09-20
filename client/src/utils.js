@@ -461,26 +461,47 @@ export const walmartFetch = (path, options = {}) =>
     fetchWithRefresh(`${WALMART_API}${path}`, options);
 
 
-export const fetchCurrentUser = async () => {
+// Session probes are requested from several places at once — RefreshHandler
+// runs globally on every navigation, pages check on mount, RequireAdmin
+// guards admin routes — which produced several identical /auth/me calls
+// milliseconds apart, each one spending a request from the shopper's
+// rate-limit budget for the same answer.
+//
+// Collapse only *concurrent* calls: callers awaiting while a probe is
+// already in flight share its promise. Deliberately no result caching —
+// a TTL would have to be longer than the 800ms delay the login screens use
+// before navigating, so a stale "logged out" answer could outlive the login
+// that replaced it. Sequential calls still hit the network and stay correct.
+let currentUserInFlight = null;
+let currentAdminInFlight = null;
+
+const probeSession = async (path, pick) => {
     try {
-        const res = await apiFetch('/auth/me');
+        const res = await apiFetch(path);
         if (!res.ok) return null;
         const data = await res.json();
-        return data && data.success ? data.user : null;
+        return data && data.success ? pick(data) : null;
     } catch {
         return null;
     }
 };
 
-export const fetchCurrentAdmin = async () => {
-    try {
-        const res = await apiFetch('/admin/me');
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data && data.success ? data.admin : null;
-    } catch {
-        return null;
+export const fetchCurrentUser = () => {
+    if (!currentUserInFlight) {
+        currentUserInFlight = probeSession('/auth/me', (d) => d.user).finally(() => {
+            currentUserInFlight = null;
+        });
     }
+    return currentUserInFlight;
+};
+
+export const fetchCurrentAdmin = () => {
+    if (!currentAdminInFlight) {
+        currentAdminInFlight = probeSession('/admin/me', (d) => d.admin).finally(() => {
+            currentAdminInFlight = null;
+        });
+    }
+    return currentAdminInFlight;
 };
 
 export const logoutUser = () => apiFetch('/auth/logout', { method: 'POST' });
