@@ -19,6 +19,13 @@ module.exports = async () => {
     process.env.CORS_ORIGINS = 'http://localhost:3002';
     process.env.AUTH_CLIENT_URL = 'http://localhost:3002';
 
+    // Mail fixtures. sendSignupOtp() returns success:false when these are
+    // unset, which makes POST /auth/register answer 500 and the whole signup
+    // flow untestable. These are dummy values — tests/setupAfterEnv.js stubs
+    // the axios transport, so nothing is ever sent to Brevo.
+    process.env.BREVO_API_KEY = 'test-brevo-key-not-real';
+    process.env.MAIL_FROM = 'AuthShield Test <no-reply@authshield.test>';
+
     // Hand the memory server to globalTeardown.
     globalThis.__MONGO_SERVER__ = mongo;
 };

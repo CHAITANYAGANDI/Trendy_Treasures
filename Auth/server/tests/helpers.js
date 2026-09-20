@@ -54,27 +54,76 @@ const closeMongo = async () => {
     }
 };
 
-// Convenience: register + login a user, return the cookies needed to
-// hit authenticated routes (auth, refresh, csrf).
 const request = require('supertest');
+const mailMock = require('./mailMock');
 
 const STRONG_PW = 'TestPass1!';
 
-const registerAndLogin = async ({
+// Step 1 only: POST /auth/register. Creates NO Client — it mails an OTP and
+// sets the short-lived `pendingSignup` cookie. Returns the parsed cookies
+// plus the code that was mailed, so callers can drive step 2.
+const startRegistration = async ({
     name = 'Test User',
     username,
     email,
     password = STRONG_PW
-}) => {
-    const a = getApp();
-    await request(a)
+} = {}) => {
+    const res = await request(getApp())
         .post('/auth/register')
         .send({ name, username, email, password })
-        .expect(201);
+        .expect(200);
 
-    const loginRes = await request(a)
+    const cookies = parseSetCookies(res);
+    return { res, ...cookies, otp: mailMock.lastOtpFor(email) };
+};
+
+// Step 2: POST /auth/register/verify with the mailed OTP. This is what
+// actually creates the Client and auto-logs it in, so the returned cookies
+// already include authToken / authRefreshToken / csrfToken.
+const completeRegistration = async ({ pendingCookies, otp }) => {
+    const res = await request(getApp())
+        .post('/auth/register/verify')
+        .set('Cookie', pendingCookies)
+        .send({ otp })
+        .expect(200);
+
+    return { res, ...parseSetCookies(res) };
+};
+
+// Full two-step signup. Returns the session cookies minted by verification.
+const registerAndVerify = async (opts) => {
+    const started = await startRegistration(opts);
+
+    // Guard the preconditions here rather than in every caller: a missing
+    // cookie or OTP means the flow broke upstream, and failing at the point
+    // of the real assertion would be confusing.
+    if (!started.jar.pendingSignup) {
+        throw new Error('POST /auth/register did not set a pendingSignup cookie');
+    }
+    if (!started.otp) {
+        throw new Error(`No signup OTP was mailed to ${opts && opts.email}`);
+    }
+
+    return completeRegistration({ pendingCookies: started.asHeader, otp: started.otp });
+};
+
+/**
+ * Register a user and return cookies for authenticated routes.
+ *
+ * Verification already auto-logs the user in, so by default we hand back the
+ * cookies it issued — one fewer round trip, and it matches what a real
+ * browser ends up holding. Pass `{ separateLogin: true }` when a test needs a
+ * distinct session (e.g. simulating a second device).
+ */
+const registerAndLogin = async (opts, { separateLogin = false } = {}) => {
+    const verified = await registerAndVerify(opts);
+    if (!separateLogin) {
+        return { jar: verified.jar, asHeader: verified.asHeader };
+    }
+
+    const loginRes = await request(getApp())
         .post('/auth/login')
-        .send({ username, password })
+        .send({ username: opts.username, password: opts.password || STRONG_PW })
         .expect(200);
 
     return parseSetCookies(loginRes);
@@ -86,6 +135,10 @@ module.exports = {
     waitForMongo,
     clearDatabase,
     closeMongo,
+    startRegistration,
+    completeRegistration,
+    registerAndVerify,
     registerAndLogin,
+    mailMock,
     STRONG_PW
 };

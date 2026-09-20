@@ -35,7 +35,9 @@
     "testTimeout": 30000,
     "globalSetup": "<rootDir>/tests/globalSetup.js",
     "globalTeardown": "<rootDir>/tests/globalTeardown.js",
-    "setupFilesAfterEach": [],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setupAfterEnv.js"
+    ],
     "testPathIgnorePatterns": [
       "/node_modules/"
     ]

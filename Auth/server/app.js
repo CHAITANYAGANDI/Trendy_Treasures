@@ -89,11 +89,20 @@ const INTERNAL_TOKEN_PATHS = ['/auth/token/refresh', '/auth/token/active'];
 const isInternalTokenPath = (req) =>
     INTERNAL_TOKEN_PATHS.some((prefix) => req.path.startsWith(prefix));
 
+// Liveness probes are unauthenticated and frequent (Render pings on a
+// schedule, and uptime monitors pile on). Billing them to the 200/15min
+// browser budget spends a shopper's allowance on infrastructure noise.
+const isHealthPath = (req) => req.path === '/health' || req.path === '/ready';
+
 const internalTokenLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: parseInt(process.env.INTERNAL_TOKEN_RATE_LIMIT_PER_MIN || '600', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    // Same CF-Connecting-IP keying as everything else. Gateway traffic over
+    // Render's internal network carries no Cloudflare header and falls back
+    // to req.ip, which is correct: it really is one internal caller.
+    keyGenerator: ipKey,
     message: { success: false, message: 'Too many token requests, slow down.' }
 });
 
@@ -109,7 +118,7 @@ app.use(rateLimit({
     // shared proxy-IP bucket here locks users out fastest.
     keyGenerator: ipKey,
     // Covered by internalTokenLimiter above — don't bill them twice.
-    skip: isInternalTokenPath
+    skip: (req) => isInternalTokenPath(req) || isHealthPath(req)
 }));
 
 

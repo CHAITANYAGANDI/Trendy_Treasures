@@ -6,6 +6,10 @@ const {
     closeMongo,
     parseSetCookies,
     registerAndLogin,
+    registerAndVerify,
+    startRegistration,
+    completeRegistration,
+    mailMock,
     STRONG_PW
 } = require('./helpers');
 
@@ -50,10 +54,10 @@ describe('register → login → /me', () => {
     });
 
     test('login with wrong password returns generic 403', async () => {
-        await request(app)
-            .post('/auth/register')
-            .send({ name: 'Bob', username: 'bobby', email: 'bob@example.com', password: STRONG_PW })
-            .expect(201);
+        // Must complete verification — registration alone creates no Client,
+        // so an unverified signup would return 403 for the uninteresting
+        // reason that the account doesn't exist.
+        await registerAndVerify({ name: 'Bob', username: 'bobby', email: 'bob@example.com' });
 
         const res = await request(app)
             .post('/auth/login')
@@ -74,10 +78,10 @@ describe('register → login → /me', () => {
     });
 
     test('register echoes a generic conflict regardless of which field collides', async () => {
-        await request(app)
-            .post('/auth/register')
-            .send({ name: 'Test User', username: 'carol', email: 'carol@example.com', password: STRONG_PW })
-            .expect(201);
+        // The conflict check runs against the clients collection, so the
+        // first account has to be fully verified before a duplicate can
+        // collide with anything.
+        await registerAndVerify({ username: 'carol', email: 'carol@example.com' });
 
         const sameEmail = await request(app)
             .post('/auth/register')
@@ -91,6 +95,86 @@ describe('register → login → /me', () => {
 
         // Both return the same message — caller can't tell which collided.
         expect(sameEmail.body.message).toBe(sameUsername.body.message);
+    });
+});
+
+
+describe('two-step signup (OTP email verification)', () => {
+    test('POST /auth/register mails a code and creates no Client yet', async () => {
+        const started = await startRegistration({
+            username: 'nate',
+            email: 'nate@example.com'
+        });
+
+        expect(started.res.body.success).toBe(true);
+        expect(started.jar.pendingSignup).toBeTruthy();
+        // No session is issued at step 1 — that only happens after the OTP.
+        expect(started.jar.authToken).toBeFalsy();
+        expect(mailMock.mailCountFor('nate@example.com')).toBe(1);
+
+        // The account genuinely does not exist yet.
+        await request(app)
+            .post('/auth/login')
+            .send({ username: 'nate', password: STRONG_PW })
+            .expect(403);
+
+        // Completing verification is what creates it.
+        const verified = await completeRegistration({
+            pendingCookies: started.asHeader,
+            otp: started.otp
+        });
+        expect(verified.res.body.success).toBe(true);
+        expect(verified.jar.authToken).toBeTruthy();
+        expect(verified.jar.authRefreshToken).toBeTruthy();
+        expect(verified.jar.csrfToken).toBeTruthy();
+
+        await request(app)
+            .post('/auth/login')
+            .send({ username: 'nate', password: STRONG_PW })
+            .expect(200);
+    });
+
+    test('a wrong OTP is rejected, creates no Client, and the right one still works', async () => {
+        const started = await startRegistration({
+            username: 'olive',
+            email: 'olive@example.com'
+        });
+
+        // Deliberately wrong code — must not be the deterministic test OTP.
+        const wrong = started.otp === '000000' ? '999999' : '000000';
+        const bad = await request(app)
+            .post('/auth/register/verify')
+            .set('Cookie', started.asHeader)
+            .send({ otp: wrong })
+            .expect(400);
+
+        expect(bad.body.success).toBe(false);
+        expect(bad.body.message).toMatch(/incorrect code/i);
+        // A failed attempt must not have issued a session.
+        const badJar = parseSetCookies(bad).jar;
+        expect(badJar.authToken).toBeFalsy();
+
+        await request(app)
+            .post('/auth/login')
+            .send({ username: 'olive', password: STRONG_PW })
+            .expect(403);
+
+        // The attempt counter burned one try but the record survives, so the
+        // correct code still completes signup.
+        const verified = await completeRegistration({
+            pendingCookies: started.asHeader,
+            otp: started.otp
+        });
+        expect(verified.jar.authToken).toBeTruthy();
+    });
+
+    test('POST /auth/register/verify without a pendingSignup cookie → 401', async () => {
+        const res = await request(app)
+            .post('/auth/register/verify')
+            .send({ otp: '123456' })
+            .expect(401);
+
+        expect(res.body.success).toBe(false);
     });
 });
 

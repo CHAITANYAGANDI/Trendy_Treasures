@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 
 require('./Models/dbConnection');
 const CredsModel = require('./Models/Credential');
+const { createTokenManager } = require('./services/tokenManager');
 const PriceSnapshot = require('./Models/PriceSnapshot');
 const PriceAlert = require('./Models/PriceAlert');
 
@@ -209,43 +210,22 @@ app.get('/health', (req, res) => {
 });
 
 
-// ─── Product token cache + injection ───────────────────────────────────────
-const TOKEN_CACHE_TTL_MS = 60 * 1000;
-const tokenCache = new Map();
-
-const lookupAccessToken = async (apiName, reqId = '-') => {
-    const key = apiName.toLowerCase();
-    const cached = tokenCache.get(key);
-    if (cached && Date.now() - cached.fetchedAt < TOKEN_CACHE_TTL_MS) {
-        console.log(`[gateway] [${reqId}] → Token cache HIT for ${apiName}`);
-        return cached.token;
-    }
-    console.log(`[gateway] [${reqId}] → Token cache MISS for ${apiName} — reading from MongoDB`);
-    const cred = await CredsModel.findOne({ api_name: { $regex: new RegExp(`^${apiName}$`, 'i') } });
-    if (!cred) {
-        console.warn(`[gateway] [${reqId}] ✗ No 'creds' document found for api_name="${apiName}". Run the admin authorization flow first.`);
-        return null;
-    }
-    tokenCache.set(key, { token: cred.access_token, fetchedAt: Date.now() });
-    return cred.access_token;
-};
-
-// ─── Refresh + retry plumbing ──────────────────────────────────────────────
+// ─── Provider token lifecycle ──────────────────────────────────────────────
 //
-// When an upstream provider (Amazon/Walmart) rejects a request because its
-// JWT has expired, the gateway:
-//   1. Signs a short-lived assertion JWT with its PRIVATE key (RFC 7523).
-//   2. POSTs to the auth server's /auth/token/refresh with the assertion as
-//      a Bearer token. The auth server verifies the signature with the
-//      matching PUBLIC key — no shared secret on either side.
-//   3. Persists the freshly-minted provider JWT to MongoDB.
-//   4. Busts the in-memory cache and retries the original request once.
+// Policy lives in services/tokenManager.js (cache, expiry check, proactive
+// refresh, single-flight, retry/backoff, cooldown) so it can be tested
+// without Mongo or a network. This file only wires it up.
 //
-// Concurrency: if multiple in-flight requests hit an expired token at the
-// same time (Home.js fires Amazon + Walmart in parallel), they share one
-// refresh promise per api_name so we don't double-mint tokens.
-
-const refreshesInFlight = new Map();
+// The trust model is unchanged: the gateway signs a short-lived RS256
+// assertion with its PRIVATE key (RFC 7523); the auth server verifies with
+// the matching PUBLIC key. No shared secret is involved in minting.
+const tokenManager = createTokenManager({
+    CredsModel,
+    signAssertion: (clientId) => signGatewayAssertion(clientId),
+    authServerUrl: AUTH_SERVER_URL,
+    logger: console,
+    env: process.env
+});
 
 app.delete('/internal/token-cache/:apiName', (req, res) => {
     const authError = requireInternalAuth(req, res);
@@ -256,9 +236,7 @@ app.delete('/internal/token-cache/:apiName', (req, res) => {
         return res.status(400).json({ success: false, message: 'apiName is required' });
     }
 
-    const key = apiName.toLowerCase();
-    tokenCache.delete(key);
-    refreshesInFlight.delete(key);
+    tokenManager.invalidate(apiName);
     return res.status(200).json({ success: true, message: 'Token cache cleared' });
 });
 
@@ -282,90 +260,6 @@ const signGatewayAssertion = (clientId) => {
         { algorithm: 'RS256' }
     );
 };
-
-// A failed refresh used to be retried on EVERY subsequent product request.
-// When the auth server itself is the unhappy party (it rate-limited us, it
-// is cold-starting, it is down), that turns a single failure into a
-// self-sustaining storm: each request fires another refresh, which keeps the
-// budget exhausted, so nothing can ever recover while traffic continues.
-// Back off for a fixed window instead and serve the upstream error directly.
-const refreshCooldownUntil = new Map();
-const REFRESH_COOLDOWN_MS = parseInt(process.env.REFRESH_COOLDOWN_MS || '30000', 10);
-
-const refreshAccessToken = (apiName, reqId = '-') => {
-    const key = apiName.toLowerCase();
-    if (refreshesInFlight.has(key)) {
-        console.log(`[gateway] [${reqId}] ↻ Refresh already in-flight for ${apiName}, awaiting existing promise`);
-        return refreshesInFlight.get(key);
-    }
-
-    const cooldownUntil = refreshCooldownUntil.get(key);
-    if (cooldownUntil && Date.now() < cooldownUntil) {
-        const secondsLeft = Math.ceil((cooldownUntil - Date.now()) / 1000);
-        console.warn(`[gateway] [${reqId}] ⏳ Refresh for ${apiName} is backing off for another ${secondsLeft}s — not retrying`);
-        return Promise.resolve(null);
-    }
-
-    const promise = (async () => {
-        try {
-            if (!GATEWAY_PRIVATE_KEY) {
-                console.warn(`[gateway] [${reqId}] ✗ Cannot refresh ${apiName}: GATEWAY_PRIVATE_KEY is not set.`);
-                return null;
-            }
-            console.log(`[gateway] [${reqId}] → Looking up credential for ${apiName} in 'creds' collection`);
-            const cred = await CredsModel.findOne({ api_name: { $regex: new RegExp(`^${apiName}$`, 'i') } });
-            if (!cred || !cred.client_id) {
-                console.warn(`[gateway] [${reqId}] ✗ Cannot refresh ${apiName}: no creds row or missing client_id.`);
-                return null;
-            }
-            console.log(`[gateway] [${reqId}] → Found credential client_id=${cred.client_id}`);
-
-            const assertion = signGatewayAssertion(cred.client_id);
-            console.log(`[gateway] [${reqId}] → Signed assertion JWT (RS256), POST ${AUTH_SERVER_URL}/auth/token/refresh`);
-
-            const refreshRes = await fetch(`${AUTH_SERVER_URL}/auth/token/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${assertion}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({})  // body unused; client_id is in the assertion
-            });
-            if (!refreshRes.ok) {
-                const detail = await refreshRes.text().catch(() => '');
-                console.warn(`[gateway] [${reqId}] ✗ Refresh failed for ${apiName}: ${refreshRes.status} ${detail}`);
-                return null;
-            }
-            const data = await refreshRes.json();
-            const newToken = data.accessToken;
-            if (!newToken) {
-                console.warn(`[gateway] [${reqId}] ✗ Refresh response missing accessToken for ${apiName}`);
-                return null;
-            }
-
-            cred.access_token = newToken;
-            await cred.save();
-            tokenCache.set(key, { token: newToken, fetchedAt: Date.now() });
-            console.log(`[gateway] [${reqId}] ✓ Refresh succeeded for ${apiName} — new token TTL=${data.expiresIn || '?'} — persisted to DB + cache`);
-            return newToken;
-        } catch (err) {
-            console.error(`[gateway] [${reqId}] ✗ Refresh threw for ${apiName}:`, err.message);
-            return null;
-        }
-    })().then((token) => {
-        if (token) {
-            refreshCooldownUntil.delete(key);
-        } else {
-            refreshCooldownUntil.set(key, Date.now() + REFRESH_COOLDOWN_MS);
-        }
-        refreshesInFlight.delete(key);
-        return token;
-    });
-
-    refreshesInFlight.set(key, promise);
-    return promise;
-};
-
 
 // Distinguishes "this token is dead, refreshing might help" from "this
 // request is forbidden for some other reason (bad URL, missing header)".
@@ -501,12 +395,16 @@ const fetchProductDetail = async (apiName, target, productId, reqId = '-') => {
     };
 
     try {
-        let token = await lookupAccessToken(apiName, reqId);
-        let res = await attempt(token);
+        const lookup = await tokenManager.getAccessToken(apiName, reqId);
+        if (lookup.status !== 'ok') {
+            console.warn(`[gateway] [${reqId}] fetchProductDetail ${apiName}/${productId} skipped — token ${lookup.status}`);
+            return null;
+        }
+        let res = await attempt(lookup.token);
         let body = await res.text();
 
         if (isRefreshableFailure(res.status, body)) {
-            const newToken = await refreshAccessToken(apiName, reqId);
+            const newToken = await tokenManager.refreshAfterRejection(apiName, reqId);
             if (newToken) {
                 res = await attempt(newToken);
                 body = await res.text();
@@ -558,19 +456,44 @@ const proxyProductRoute = (apiName, provider, target, prefix) => async (req, res
     };
 
     try {
-        let token = await lookupAccessToken(apiName, req.requestId);
-        if (!token) {
-            console.warn(`[gateway] [${req.requestId}] ✗ No token available for ${apiName} — request will likely fail downstream`);
+        // Proactive: check the JWT's own `exp` before we spend a round-trip
+        // on a token the provider is going to reject. Forwarding a dead token
+        // comes back as a generic 403 that isRefreshableFailure() does not
+        // match, so the old reactive-only path left the catalogue empty.
+        const lookup = await tokenManager.getAccessToken(apiName, req.requestId);
+
+        if (lookup.status !== 'ok') {
+            // Two distinct operator problems — "never provisioned" needs the
+            // admin authorization flow, "unavailable" needs the auth service
+            // looked at — but one stable, uninformative body for the browser.
+            // tokenManager has already logged the specific cause.
+            console.warn(`[gateway] [${req.requestId}] ✗ ${provider} ${lookup.status === 'not_provisioned' ? 'is not provisioned' : 'token could not be renewed'} — serving 503`);
+            return res.status(503).json({
+                success: false,
+                message: 'Product provider authentication is temporarily unavailable.'
+            });
         }
+
+        const token = lookup.token;
         console.log(`[gateway] [${req.requestId}] → Forwarding ${req.method} to ${upstreamUrl}`);
         let upstreamRes = await attempt(token);
         let body = await upstreamRes.text();
         console.log(`[gateway] [${req.requestId}] ← Upstream responded ${upstreamRes.status}`);
 
+        // A 4xx the refresh flow won't touch is almost always a config
+        // mismatch (SECRET vs JWT_PROVIDER_SECRET, or a stale api_url claim).
+        // Log the body or it's invisible outside the browser's network tab.
+        if (upstreamRes.status >= 400 && !isRefreshableFailure(upstreamRes.status, body)) {
+            console.warn(`[gateway] [${req.requestId}] ✗ Non-refreshable ${upstreamRes.status} from ${apiName} — body: ${body.slice(0, 300).replace(/\s+/g, ' ')}`);
+        }
+
         if (isRefreshableFailure(upstreamRes.status, body)) {
             console.log(`[gateway] [${req.requestId}] ⚠ Upstream JWT rejected for ${apiName} (${upstreamRes.status}) — body excerpt: ${body.slice(0, 120).replace(/\s+/g, ' ')}`);
             console.log(`[gateway] [${req.requestId}] ↻ Triggering refresh flow for ${apiName}`);
-            const newToken = await refreshAccessToken(apiName, req.requestId);
+            // Reactive backstop for revoked/superseded tokens that proactive
+            // expiry checking cannot predict. Exactly one retry — the result
+            // is passed through either way, so this cannot loop.
+            const newToken = await tokenManager.refreshAfterRejection(apiName, req.requestId);
             if (newToken) {
                 console.log(`[gateway] [${req.requestId}] ↻ Retrying upstream with refreshed token`);
                 upstreamRes = await attempt(newToken);

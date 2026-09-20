@@ -236,6 +236,11 @@ function Home() {
         ? {
             sources: failed.map((result) => result.source),
             rateLimited: failed.some((result) => result.status === 429),
+            // 401/403/503 here mean the provider connection isn't authorized
+            // (missing credential, or a provider-secret mismatch) — a hard
+            // config failure. Saying "still waking up" sends you off to wait
+            // for a cold start that already finished.
+            notAuthorized: failed.some((result) => [401, 403, 503].includes(result.status)),
             total: failed.length === results.length,
           }
         : null
@@ -424,7 +429,9 @@ function Home() {
             <p className="text-ink-500 mt-2">
               {loadError.rateLimited
                 ? 'The store hit its rate limit. Give it a few seconds and try again.'
-                : 'The product services did not respond — they may still be waking up.'}
+                : loadError.notAuthorized
+                  ? 'The store could not reach its sellers right now. This one needs an admin to fix — retrying will not help.'
+                  : 'The product services did not respond — they may still be waking up.'}
             </p>
             <button onClick={fetchProducts} className="btn-secondary mt-6">
               Try again

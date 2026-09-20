@@ -42,7 +42,10 @@ def _matches_api_url(original_url, api_url):
 # request. TTL is short so that revocation propagates quickly; tune via
 # AUTH_INTROSPECT_CACHE_TTL_MS if needed.
 
-_AUTH_SERVER_URL = os.environ.get('AUTH_SERVER_URL', 'http://localhost:5000')
+# AUTH_SERVER_URL may be a public host (https://x.onrender.com) or a Render
+# internal one (http://auth:10000), with or without a trailing slash. Strip
+# trailing slashes once so joins below can't produce a doubled slash.
+_AUTH_SERVER_URL = os.environ.get('AUTH_SERVER_URL', 'http://localhost:5000').rstrip('/')
 _INTROSPECT_CACHE_TTL_S = int(os.environ.get('AUTH_INTROSPECT_CACHE_TTL_MS', '30000')) / 1000.0
 _jti_cache = {}
 _jti_cache_lock = threading.Lock()

@@ -30,7 +30,12 @@ const matchesApiUrl = (originalUrl, apiUrl) => {
 // request. TTL is short so that revocation propagates quickly; tune via
 // AUTH_INTROSPECT_CACHE_TTL_MS if needed.
 
+// AUTH_SERVER_URL may be a public host (https://x.onrender.com) or a Render
+// internal one (http://auth:10000), with or without a trailing slash — join
+// rather than concatenate so neither shape produces a doubled slash.
 const AUTH_SERVER_URL = process.env.AUTH_SERVER_URL || 'http://localhost:5000';
+const authUrl = (path) =>
+    `${AUTH_SERVER_URL.replace(/\/+$/, '')}/${String(path).replace(/^\/+/, '')}`;
 const INTROSPECT_CACHE_TTL_MS = parseInt(process.env.AUTH_INTROSPECT_CACHE_TTL_MS || '30000', 10);
 const jtiCache = new Map();
 const inflight = new Map();
@@ -53,7 +58,7 @@ const fetchActiveJti = async (clientId, { bustCache = false } = {}) => {
                 headers['x-internal-auth'] = process.env.INTERNAL_AUTH_SECRET;
             }
             const res = await fetch(
-                `${AUTH_SERVER_URL}/auth/token/active/${encodeURIComponent(clientId)}`,
+                authUrl(`/auth/token/active/${encodeURIComponent(clientId)}`),
                 { method: 'GET', headers }
             );
             if (!res.ok) {
