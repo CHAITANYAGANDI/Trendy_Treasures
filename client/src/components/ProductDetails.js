@@ -216,16 +216,11 @@ function ProductDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(360px,45%)_minmax(360px,1fr)] xl:grid-cols-[minmax(420px,42%)_minmax(360px,1fr)_minmax(280px,340px)] gap-6 xl:gap-8 items-start animate-fade-in">
           <section className="lg:sticky lg:top-24">
             <div className="bg-white border border-ink-100/70 rounded-2xl shadow-card overflow-hidden">
-              <div className="relative min-h-[360px] sm:min-h-[480px] lg:min-h-[620px] xl:min-h-[680px] bg-gradient-to-br from-white via-ink-50 to-ink-100 flex items-center justify-center">
+              <div className="min-h-[360px] sm:min-h-[480px] lg:min-h-[620px] xl:min-h-[680px] bg-gradient-to-br from-white via-ink-50 to-ink-100 flex items-center justify-center">
                 <img
                   src={product.imageUrl}
                   alt={product.name}
                   className="w-full h-full max-h-[680px] object-contain p-8 sm:p-10"
-                />
-                <SourcePill
-                  provider={source}
-                  prefix="Sold on"
-                  className="absolute top-4 left-4"
                 />
               </div>
             </div>
