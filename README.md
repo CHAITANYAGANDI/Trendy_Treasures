@@ -1,487 +1,393 @@
-# TrendyTreasures — Microservice E-Commerce Platform
+# Trendy Treasures
 
-TrendyTreasures is an online storefront made up of **seven small services** that work together. Shoppers see a single catalog, but the products actually come from two simulated providers (Amazon and Walmart). When the shopper is ready to pay, TrendyTreasures hands them over to the provider's own checkout page — the provider takes the money and ships the order. TrendyTreasures itself never touches the payment.
+**A microservice e-commerce platform that aggregates products from independent providers, keeps provider credentials off the browser, and hands checkout to the provider that owns the transaction.**
 
-> **Live deployment:** the Storefront and AuthShield SPAs run on Vercel. The API Gateway, Users, Auth, Amazon, and Walmart backends run on Google Cloud Run in Toronto (`northamerica-northeast2`). Runtime secrets are stored in Google Secret Manager, source deployments build through Cloud Build and Artifact Registry, data lives in MongoDB Atlas, payments use Stripe (test mode), email is sent through Brevo, and AI features use OpenAI. For deeper details, see the [`docs/`](docs/) folder.
+[![Live Storefront](https://img.shields.io/badge/live-storefront-2ea44f)](https://ecommerce-test-qvvv.vercel.app) [![AuthShield](https://img.shields.io/badge/live-AuthShield-3178c6)](https://ecommerce-test-lemon-xi.vercel.app) ![React](https://img.shields.io/badge/React-18-61dafb) ![Node.js](https://img.shields.io/badge/Node.js-20-339933) ![Python](https://img.shields.io/badge/Python-3.12-3776ab) ![Cloud Run](https://img.shields.io/badge/Google_Cloud-Run-4285f4) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47a248)
 
----
-
-## What makes this project interesting
-
-- **It mixes two programming languages.** Four backend services are written in Node.js + Express; Walmart is written in Python + Flask. The two stacks talk to each other only through HTTP and signed JWTs, which proves the service boundaries really are language-agnostic.
-- **Three separate login systems, on purpose.** Shoppers, admins, and developers each have their own login flow with their own secret keys. If one secret leaks, the other two are unaffected.
-- **Asymmetric keys between the gateway and Auth.** The gateway signs with a private key; Auth verifies with a public key. So even if someone breaks into the Auth server, they still can't forge a new token without the gateway's private key.
-- **Payment amounts are recomputed on the server.** The browser never tells the provider how much to charge — the server figures out the price from a trusted record. A user editing the page can't pay less than they owe.
-- **Tokens can be revoked instantly.** Every provider token carries a `jti` (token ID). Re-authorizing rotates that ID, and any token with the old `jti` is rejected on the next call.
-- **Cross-domain CSRF protection.** Because the storefront is on `*.vercel.app` and the API is on Google Cloud Run's `*.run.app` domain, we use a "double-submit cookie" pattern where the CSRF token is also returned in the response body, since JavaScript can't read cookies across different registrable domains.
+**Live storefront → [ecommerce-test-qvvv.vercel.app](https://ecommerce-test-qvvv.vercel.app)**  
+**AuthShield → [ecommerce-test-lemon-xi.vercel.app](https://ecommerce-test-lemon-xi.vercel.app)**
 
 ---
 
-## 1. Architecture at a glance
+## What is Trendy Treasures?
+
+Trendy Treasures is an e-commerce aggregator built as seven deployable pieces: two React SPAs, an API Gateway, Users and Auth services, and two simulated provider services for Amazon and Walmart.
+
+Shoppers browse one catalog and keep one cart, while product data and checkout remain provider-owned. The gateway injects provider credentials server-side, refreshes them when needed, and routes requests without exposing those tokens to the browser.
+
+The project is designed to demonstrate production-style service boundaries, authentication, secure checkout handoff, price tracking, AI-assisted product features, and cloud deployment across both Node.js and Python services.
+
+## The Problem
+
+A marketplace aggregator has to solve more than product display:
+
+- provider credentials must never reach the browser
+- one storefront has to talk to multiple provider APIs consistently
+- expired provider tokens should refresh without interrupting the shopper
+- checkout totals must come from trusted server-side product data
+- shopper, admin and developer authentication need different trust boundaries
+- price changes need history, alerts and scheduled checks
+- services written in different languages still need one stable contract
+
+Trendy Treasures keeps those concerns separated instead of putting everything into one application.
+
+## Who It Is For
+
+- **Shoppers** browsing products from multiple providers in one storefront
+- **Admins** authorizing provider integrations and managing users
+- **Developers** creating and rotating API credentials through AuthShield
+- **Engineers and recruiters** reviewing a full-stack microservice system with security, payments, AI features and cloud deployment
+
+## Live Demo
+
+**Storefront → [ecommerce-test-qvvv.vercel.app](https://ecommerce-test-qvvv.vercel.app)**
+
+**AuthShield → [ecommerce-test-lemon-xi.vercel.app](https://ecommerce-test-lemon-xi.vercel.app)**
+
+Payments use **Stripe test mode**. Amazon and Walmart are simulated provider services built specifically for this project.
+
+## Product Preview
+
+The live deployment covers the complete flow:
+
+- browse Amazon and Walmart products through one storefront
+- create shopper or admin sessions, including Google sign-in
+- add products to a guest or authenticated cart
+- track prices and receive price-drop alerts
+- ask product questions or request AI price advice
+- hand checkout to the correct provider
+- create, rotate and authorize provider credentials through AuthShield
+
+## Core Features
+
+### Storefront
+
+- Unified Amazon and Walmart product catalog
+- Shopper signup, login, Google OAuth and password recovery
+- Guest cart that merges into the server cart after login
+- Product details, price history and price alerts
+- Admin dashboard and user management
+
+### Provider integration
+
+- API Gateway routes all storefront API traffic
+- Provider JWTs are injected server-side and never exposed to the browser
+- Expiring provider tokens refresh transparently through Auth
+- Amazon is implemented in Node.js; Walmart uses Python/Flask with the same contract
+- Provider tokens are scoped by API path and checked against the current active token ID
+
+### Checkout
+
+- Cart items are grouped by provider
+- Users creates a short-lived checkout intent with no shopper PII
+- The browser is handed to the provider's branded checkout page
+- Stripe PaymentIntents are created from server-trusted item data
+- Providers verify the payment before saving the order
+- Successful checkout calls back to Users and removes purchased items from the cart
+
+### Price tracking and AI
+
+- Price snapshots are stored over time
+- GitHub Actions checks tracked products every six hours
+- Threshold crossings can trigger Brevo email alerts
+- AI price advice uses recent price history
+- Product Q&A is grounded in the selected product's metadata
+
+### Developer credentials
+
+- Separate AuthShield SPA for developer accounts
+- Create, inspect, rotate and delete API credentials
+- OAuth-style provider authorization flow
+- Credential secrets are stored hashed; provider access tokens support revocation
+
+## How Trendy Treasures Works
+
+1. **The storefront calls the API Gateway.**
+2. **The gateway routes the request** to Users, Amazon or Walmart.
+3. **Provider requests get a server-side JWT** from the gateway's credential store.
+4. **Near-expiry or rejected tokens refresh automatically** through Auth using an RS256-signed gateway assertion.
+5. **Checkout creates a referral intent** and moves the browser to the correct provider.
+6. **The provider recomputes the amount**, completes Stripe payment and confirms the order.
+7. **Price snapshots and alerts continue in the background** through scheduled GitHub Actions checks.
+
+## Architecture
+
+The diagram below shows the current production architecture.
 
 ```mermaid
 flowchart TB
     Storefront["Storefront SPA<br/>React · Vercel"]
     AuthClient["AuthShield SPA<br/>React · Vercel"]
+
     Gateway["API Gateway<br/>Node.js + Express · Cloud Run"]
-    Users["Users service<br/>Node.js + Express · Cloud Run"]
-    Auth["Auth server<br/>Node.js + Express · Cloud Run"]
-    Amazon["Amazon provider<br/>Node.js + Express · Cloud Run"]
-    Walmart["Walmart provider<br/>Python + Flask · Cloud Run"]
-    Atlas[("MongoDB Atlas<br/>storefront · auth · amazon · walmart")]
-    Secrets["Google Secret Manager<br/>runtime secrets"]
-    Actions["GitHub Actions<br/>6-hour price snapshots"]
+    Users["Users<br/>Node.js + Express · Cloud Run"]
+    Auth["Auth<br/>Node.js + Express · Cloud Run"]
+    Amazon["Amazon Provider<br/>Node.js + Express · Cloud Run"]
+    Walmart["Walmart Provider<br/>Python + Flask · Cloud Run"]
+
+    Atlas[("MongoDB Atlas")]
+    Secrets["Google Secret Manager"]
+    Actions["GitHub Actions<br/>6-hour snapshots"]
 
     Storefront --> Gateway
     AuthClient --> Auth
+
     Gateway --> Users
     Gateway --> Amazon
     Gateway --> Walmart
     Gateway --> Auth
+
     Users --> Auth
     Amazon --> Auth
     Walmart --> Auth
+
     Users --> Atlas
     Gateway --> Atlas
     Auth --> Atlas
     Amazon --> Atlas
     Walmart --> Atlas
+
     Secrets -.-> Gateway
     Secrets -.-> Users
     Secrets -.-> Auth
     Secrets -.-> Amazon
     Secrets -.-> Walmart
+
     Actions --> Gateway
 ```
 
-### The seven services
+The gateway and Users share the storefront database because the gateway reads provider credentials, price snapshots and alerts. Auth, Amazon and Walmart keep their own databases.
 
-| Service | Stack | What it does |
-|---|---|---|
-| `client/` | React 18 | Main storefront and admin pages |
-| `Auth/client/` | React 18 | Developer-facing pages for managing API credentials |
-| `APIGateway/` | Node + Express | The only public entry point for the storefront's API calls. Injects provider tokens; refreshes them when they expire. |
-| `Users/` | Node + Express + Mongoose | Shopper and admin accounts, cart, checkout records, price alerts, AI features |
-| `Auth/server/` | Node + Express + EJS | Developer accounts, API credential lifecycle, issuing provider JWTs |
-| `Amazon/` | Node + Express + Stripe | Amazon-branded mock provider — products, checkout, orders |
-| `Walmart/` | Python + Flask + Stripe + MongoEngine | Walmart-branded mock provider — same idea, different language |
+## Technology Stack
 
-### Things every service shares
-
-| Feature | Where | What it does |
-|---|---|---|
-| API versioning | All gateway routes | All endpoints sit under `/api/v1/*`, so we can ship a v2 later without breaking old clients |
-| Health endpoint | Every service | `GET /health` returns service name, uptime, and DB connection state |
-| Request IDs | Gateway → all services | Every request gets an `x-request-id` UUID that shows up in every log line, so you can trace a single request across all services |
-| Rate limiting | Each service | 120 requests/minute on most routes; tighter limits on login (30 / 15 min) and payments (20/min) |
-| Refresh tokens | Users + Auth | Short-lived access tokens (1 hour) + 7-day refresh tokens |
-| Provider-token caching | Gateway | 60-second in-memory cache so we don't read the DB on every product request |
-| Helmet, CSRF, CORS | Every backend | Security headers, double-submit CSRF protection, strict origin allowlists |
-| Docker support | All backends | Each service has its own `Dockerfile`; a top-level `docker-compose.yml` runs them all |
-
----
-
-## 2. Folder layout
-
-```
-E_Commerce_Prod/
-├── APIGateway/          The gateway — port 7000
-├── Users/               Shopper and admin domain — port 7001
-├── Auth/
-│   ├── server/          Developer + provider credential server — port 5000
-│   └── client/          Developer SPA — port 3002
-├── Amazon/              Provider service — port 8000
-├── Walmart/             Provider service (Python) — port 8001
-├── client/              Storefront SPA — port 3001
-├── docs/                Detailed documentation
-│   ├── ARCHITECTURE.md     System diagrams and per-flow walkthroughs
-│   ├── SECURITY.md         Threat model and OWASP control matrix
-│   ├── API.md              Every endpoint with curl examples
-│   └── DATA_MODEL.md       Database schemas and indexes
-├── docker-compose.yml   Spins up all backends locally
-├── genkeys.js           Helper to generate the gateway/Auth RSA keypair
-└── README.md            This file
-```
-
----
-
-## 3. Technology used
-
-| Layer | What we use |
+| Area | Technology |
 |---|---|
-| Frontend | React 18, React Router v6, react-toastify, Tailwind |
-| Node backends (4 services) | Node.js 20, Express 4 |
-| Python backend (1 service) | Python 3.12, Flask, MongoEngine |
-| Gateway | Express + `http-proxy-middleware` v3 |
-| Hosting | Vercel for both React SPAs; Google Cloud Run for all five backends |
-| Build + registry | Google Cloud Build + Artifact Registry |
-| Secrets | Google Secret Manager with a dedicated runtime service account per backend |
-| Database | MongoDB Atlas — isolated databases for storefront, Auth, Amazon, and Walmart |
-| Auth | JWTs (`jsonwebtoken`, `pyjwt`), bcrypt for passwords, RS256 keypair for gateway↔Auth, optional Google OAuth2 |
-| Payments | Stripe (test mode), server-side amount verification |
+| Storefront | React 18, React Router, Tailwind CSS |
+| AuthShield | React 18 |
+| API Gateway | Node.js 20, Express, http-proxy-middleware |
+| Users service | Node.js, Express, Mongoose |
+| Auth service | Node.js, Express, EJS, JWT, Google OAuth |
+| Amazon provider | Node.js, Express, Stripe |
+| Walmart provider | Python 3.12, Flask, MongoEngine, Stripe |
+| Database | MongoDB Atlas |
+| AI | OpenAI `gpt-4o-mini` |
 | Email | Brevo HTTPS API |
-| AI | OpenAI's `gpt-4o-mini` for price advice and product Q&A |
-| Security | `helmet`, `express-rate-limit`, double-submit CSRF, httpOnly cookies, CSP form-action allowlist |
+| Frontend hosting | Vercel |
+| Backend hosting | Google Cloud Run |
+| Secrets | Google Secret Manager |
+| Build & registry | Cloud Build, Artifact Registry |
+| Testing | Node test runner, Jest, Supertest, Python unittest |
+| Automation | GitHub Actions |
 
----
+## Engineering Highlights
 
-## 4. How logins work
+- **Transparent provider-token refresh** — the gateway refreshes expiring tokens through Auth and retries the original provider request without exposing the refresh flow to the browser.
+- **Single-flight refresh protection** — concurrent requests for the same provider share one in-flight refresh instead of creating a token-refresh stampede.
+- **Asymmetric gateway trust** — the gateway signs refresh assertions with an RS256 private key; Auth stores only the matching public key.
+- **Immediate provider-token revocation** — each provider JWT carries a `jti`; reauthorization rotates the active ID and superseded tokens are rejected.
+- **Language-agnostic service contracts** — Amazon and Walmart implement the same provider API in Node.js and Python.
+- **Server-authoritative payments** — providers recompute totals from trusted checkout intent data and verify Stripe payment state before persisting orders.
+- **Portable client identity** — rate-limit identity works across local development, Cloud Run and the retained Render compatibility preset without trusting caller-spoofable headers.
+- **Least-purpose runtime identities** — each Cloud Run service has its own service account and reads only the secrets it needs.
 
-There are three separate login systems, each with its own threat model.
+## AI and Search
 
-| Who | Cookies | Access token lasts | Refresh token lasts | How sessions are killed |
-|---|---|---|---|---|
-| Shopper | `userToken` + `userRefreshToken` | 1 hour | 7 days | Wait for TTL |
-| Admin | `adminToken` + `adminRefreshToken` | 1 hour | 7 days | Wait for TTL |
-| Developer | `authToken` + `authRefreshToken` | 15 min | 7 days | `tokenVersion` bump on password change |
-| Provider (server-only) | `productsauthorization` header — no cookies | 1 hour | RS256 assertion-driven refresh | Rotating `active_jti` on re-authorize |
+AI is deliberately limited to features where it adds value rather than controlling the transaction path.
 
-**Cookie settings:** in production, all cookies are `HttpOnly`, `SameSite=None`, and `Secure` (the SPAs and APIs are on different domains). In dev, we use `SameSite=Lax`.
+### Price advice
 
-**CSRF:** we use a double-submit cookie pattern. The server returns the CSRF token in both a cookie and the response body, because cross-domain browsers can't read the cookie via `document.cookie`.
+Recent price snapshots are summarized into deterministic statistics before the model sees them. The model explains whether the current price looks favorable; it does not calculate the underlying history itself.
 
-**Service-to-service:**
-- **Gateway → Auth (token refresh):** uses an RS256-signed assertion. The gateway has the private key; Auth has only the public key. So Auth can verify but can't sign.
-- **Everything else internal** (Auth ↔ Users, providers ↔ gateway, providers ↔ Auth): uses an `x-internal-auth` header carrying a shared secret. If the env var is missing, the request is rejected — never accepted by default.
+### Product Q&A
 
----
+Questions are answered from the selected product's metadata. Inputs are capped before they reach OpenAI, and the feature degrades cleanly when AI configuration is unavailable.
 
-## 5. Main user flows
+Product discovery itself remains provider-backed rather than relying on an AI search index.
 
-### 5.1 Signing up (two-step with email OTP)
+## Real-Time and Background Processing
 
-`POST /auth/signup` checks the form, sends a 4-digit code to the user's email, and sets a temporary `pendingSignup` cookie. **No user record is created yet.** Then `POST /auth/signup/verify` checks the code and creates the account. If the user abandons signup, nothing gets stored — the OTP just expires after 120 seconds.
+Trendy Treasures does not require WebSockets. Work that should not block a shopper is handled through scheduled or transparent background-style flows:
 
-### 5.2 An admin authorizes a provider's API
+- **Price snapshots** — GitHub Actions calls the gateway every six hours for products with active alerts.
+- **Price-drop notifications** — threshold evaluation can trigger Brevo email without changing the shopping flow.
+- **Provider-token refresh** — refresh and retry happen behind the gateway, with a single-flight lock per provider.
+- **Active-token checks** — Amazon and Walmart cache Auth introspection briefly so every catalog request does not require another network hop.
 
-This is the flow that lets TrendyTreasures actually call the provider product APIs.
+## Security and Data Protection
 
-1. The developer creates a credential in the Auth SPA. They get back a `client_id`, `client_secret`, and `redirect_uri`.
-2. The admin enters those values into `/admin/auth/request`. The Users service saves them temporarily in `temp_clients` (auto-deleted after 10 minutes).
-3. The admin is redirected to Auth's consent page (rendered with EJS) and types the developer's username and password.
-4. Auth verifies the credentials, signs a provider JWT, stamps the credential with `active_jti`, and POSTs `{ creds, accessToken }` to the redirect URL. That URL is a Users endpoint protected by `x-internal-auth`.
-5. Users saves the token into the `creds` collection. From there, the gateway reads it on every product request (with a 60-second cache).
+- **Separate auth domains** for shoppers/admins, developers and provider access tokens
+- **HttpOnly, Secure cookies** in production
+- **Double-submit CSRF protection** for authenticated browser actions
+- **Strict CORS allowlists** for Vercel and Cloud Run origins
+- **RS256 assertions** from Gateway → Auth
+- **Shared internal-auth secret** on protected service-to-service callbacks
+- **Hashed passwords and credential secrets**
+- **Provider JWT path scoping** so one provider token cannot be reused against another API
+- **Rate limits** on general, authentication and payment routes
+- **SSRF checks** on developer redirect URIs
+- **Google Secret Manager** for production secrets
+- **Server-side Stripe amount verification**
 
-Full sequence diagram in [`docs/ARCHITECTURE.md` section 3.2](docs/ARCHITECTURE.md#32-admin--auth-provider-authorization-the-oauth-style-flow).
+No compliance certification is claimed. This is a portfolio system using Stripe test mode and simulated provider services.
 
-### 5.3 Loading products (with a transparent token refresh)
+## Production Deployment
 
-The gateway keeps provider tokens — the browser never sees them. If a provider rejects the token because it expired, here's what happens automatically:
-
-1. The gateway grabs a lock for this `apiName` so multiple expiring requests don't all refresh at once.
-2. It signs a short-lived RS256 assertion with its private key.
-3. It calls `POST /auth/token/refresh` on the Auth server. Auth verifies the assertion with the public key, mints a new provider JWT, and rotates `active_jti`.
-4. The gateway saves the new token, clears its 60-second cache, and retries the original product request.
-
-From the shopper's point of view, the request just worked.
-
-### 5.4 Cart → checkout → provider
-
-1. The storefront groups cart items by which provider sells them.
-2. It calls `POST /checkout/intent`, which creates a record with a `referralCode` (looks like `TT-<16 hex>`). This record has **no PII** — just product IDs and quantities.
-3. The browser navigates to the provider's checkout page, passing `?ref=<code>`.
-4. The provider checkout page calls back through the gateway to read the intent. The referral code is the capability — anyone with the code can read the intent.
-5. The provider creates a Stripe PaymentIntent **using the items the gateway returned**, not anything from the browser.
-6. The user pays via Stripe.js.
-7. The provider asks Stripe to confirm the payment, saves the order locally.
-8. The provider calls `/checkout/intent/:code/complete` on Users (with `x-internal-auth`).
-9. Users marks the intent as completed and removes those items from the buyer's cart.
-
-### 5.5 Price drop alerts
-
-When someone loads a product detail page, the gateway also snapshots the current price (but only if the last snapshot is more than 6 hours old). If a snapshot crosses an alert threshold and the cooldown has passed, the gateway tells Users to email the buyer via Brevo.
-
-### 5.6 AI features
-
-- `GET /ai/price-advice/:provider/:productId` — uses 30 days of price snapshots to recommend "buy now" or "wait." Cached for 6 hours per product.
-- `POST /ai/product-qa` — answers questions about a specific product using its metadata. Question and product description lengths are capped before being sent to OpenAI.
-
----
-
-## 6. Database layout
-
-Every service owns its own MongoDB database. The gateway shares the `trendytreasures` database with Users for shared data like `creds`, `price_snapshots`, and `price_alerts`.
-
-| Database | Who owns it | Main collections |
-|---|---|---|
-| `trendytreasures` | Users (+ Gateway) | `users`, `cart`, `checkoutIntent`, `otp`, `temp_clients`, `creds`, `price_alerts`, `price_snapshots` |
-| `auth` | Auth server | `clients` (developers), `credentials`, `authOtp` |
-| `amazon` | Amazon service | `products`, `orders`, `payments`, `guestCustomers`, `addresses` |
-| `walmart` | Walmart service | Same shape, with `Walmart_*` collection names |
-
-> **Note on names:** in the code and connection strings, the first database is still called `ecommerce`. The docs call it `trendytreasures` because that matches the product name. They refer to the same physical database.
-
-### A few design notes
-
-- **`users`** stores both shoppers and admins. The `role` field tells them apart. The `email` field has a unique index.
-- **`credentials.client_secret_hash`** is hidden by Mongoose's `select: false` so it never accidentally appears in API responses. `active_jti` is what we update when revoking tokens.
-- **`otp` (TTL 120s)** and **`temp_clients` (TTL 600s)** clean themselves up using MongoDB's built-in TTL feature.
-- **`checkoutIntent`** intentionally has no PII. The provider only sees product IDs and quantities. The `referralCode` is what links it to the order on the provider's side.
-- **`creds`** has a unique compound index on `{client_id, api_name}` because the gateway reads it on every product request.
-
-Full schemas and indexes are in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
-
----
-
-## 7. Notes on each service
-
-### 7.1 API Gateway (`APIGateway/`)
-
-- Proxies `/api/v1/user/*` to Users; `/api/v1/amazon/products*` and `/api/v1/walmart/products*` to the providers (after injecting the provider JWT).
-- Refuses to start in production if any required env var is missing.
-- Keeps a per-`apiName` map of in-flight refresh promises so a hundred concurrent requests share one refresh call.
-- Saves price snapshots after each product-detail proxy response.
-
-### 7.2 Users service (`Users/`)
-
-- Routes are grouped under `/auth`, `/admin`, `/cart`, `/checkout`, `/account`, `/recovery`, `/prices`, `/ai`.
-- The auth middleware tries `userToken` first, then `adminToken`, then the `Authorization` header. It also accepts Google `ya29.*` access tokens.
-- Internal endpoints (`/internal/*`, `/admin/auth/callback`, `/checkout/intent/:code/complete`) skip the CSRF check because there's no session cookie on those calls.
-- JSON body size capped at 32KB.
-
-### 7.3 Auth server (`Auth/server/`)
-
-- Renders an EJS consent page at `/auth/client/login` for the OAuth-style authorize flow.
-- The CSP `form-action` directive needs the storefront origin in `FORM_ACTION_ORIGINS` for cross-origin form submission to work.
-- Has the most extensive automated tests (Jest + Supertest): signup/login/refresh, CSRF, `tokenVersion` invalidation, fail-closed introspection, OAuth state validation, body-size caps.
-- `/auth/token/refresh` only accepts requests signed with an RS256 assertion from the gateway.
-
-### 7.4 Amazon and Walmart providers
-
-These are functionally identical — same contracts, different languages:
-
-- Product routes (`/get`, `/:id`) require a `productsauthorization` JWT verified locally with `SECRET` (same value as Auth's `JWT_PROVIDER_SECRET`).
-- The JWT's `api_url` claim must match the request's `x-original-url` header (so an Amazon token can't be used on Walmart).
-- The JWT's `jti` is checked against Auth's `/auth/token/active/:clientId` (cached 30 seconds per `clientId`).
-- The checkout pages (`/checkout`, `/confirmation`) plus `/payments/create-intent` and `/orders/place` are public-but-referral-gated, and verify Stripe payments before saving the order.
-- `/config.js` exposes only the Stripe **publishable** key, the gateway URL, and the storefront URL. The Stripe secret key stays server-side.
-
-### 7.5 Storefront client (`client/`)
-
-- The `apiFetch` wrapper handles `credentials: 'include'`, fetches a CSRF token, captures rotated tokens from response bodies, and automatically refreshes the session on a 401. **Never call `fetch` directly** — you'll skip the CSRF and refresh logic.
-- A guest cart in `localStorage` is merged into the server cart when the user logs in.
-
-### 7.6 Auth client (`Auth/client/`)
-
-Five screens: register, login, dashboard, create credential, credential details. Session state is checked with `GET /auth/me` on page load.
-
----
-
-## 8. Security highlights
-
-| Concern | How we protect against it |
+| Piece | Where |
 |---|---|
-| Password storage | bcrypt (cost 10 for shoppers, cost 12 for developers) |
-| Session theft | `HttpOnly` cookies, `SameSite=None; Secure` in production |
-| CSRF | Double-submit cookie + `x-csrf-token` header; token also returned in response body for cross-domain SPAs |
-| Cross-provider token reuse | JWT's `api_url` claim must match the request path |
-| Stale or revoked provider tokens | Every request checks `active_jti` against Auth (cached 30s) |
-| Refresh token leak (developer side) | Changing the password bumps `tokenVersion` and invalidates all outstanding refresh tokens |
-| Payment amount tampering | Subtotal is recomputed server-side and compared to `paymentIntent.amount_received` |
-| SSRF via `redirect_uri` | We check the URL against private IP ranges, both statically and after DNS resolution |
-| Email enumeration on login | The same "Invalid credentials" response for "wrong password" and "unknown email" |
-| Email enumeration on Auth recovery | Opaque "if an account exists, we sent a link" response |
-| Brute force on login | Auth-route rate limit of 30 attempts per 15 minutes |
-| Stripe abuse | Payments rate limit of 20/minute + referral-code validation |
-| Internal endpoint impersonation | `x-internal-auth` shared secret, rejected if env var is missing |
-| Gateway → Auth impersonation | RS256 asymmetric keys — Auth verifies but can't sign |
+| Storefront | Vercel |
+| AuthShield | Vercel |
+| API Gateway | Google Cloud Run — Toronto |
+| Users | Google Cloud Run — Toronto |
+| Auth | Google Cloud Run — Toronto |
+| Amazon | Google Cloud Run — Toronto |
+| Walmart | Google Cloud Run — Toronto |
+| Databases | MongoDB Atlas |
+| Secrets | Google Secret Manager |
+| Container builds | Cloud Build + Artifact Registry |
+| Scheduled snapshots | GitHub Actions |
 
-Known gaps and recommended fixes are documented in [`docs/SECURITY.md` section 6](docs/SECURITY.md#6-known-gaps-and-mitigations).
+The current Cloud Run deployment uses one instance per backend while rate-limit counters, replay protection and several caches remain in memory.
 
----
+Full runbook: **[CLOUD_RUN_DEPLOYMENT.md](CLOUD_RUN_DEPLOYMENT.md)**.
 
-## 9. Environment variables
+## Performance and Load Testing
 
-Every service has a `.env.example`. Production values are not in this repo.
+No production load-test benchmark is claimed yet.
 
-| Service | Important required variables |
-|---|---|
-| `APIGateway/` | `MONGO_CONN`, `USERS_SERVICE_URL`, `AMAZON_SERVICE_URL`, `WALMART_SERVICE_URL`, `AUTH_SERVER_URL`, `INTERNAL_AUTH_SECRET`, `GATEWAY_PRIVATE_KEY`, `GATEWAY_ISSUER`, `CORS_ORIGINS` |
-| `Users/` | `MONGO_CONN`, `JWT_SECRET`, `INTERNAL_AUTH_SECRET`, `AUTH_SERVER_URL`, `API_GATEWAY_URL`, `CLIENT_URL`, `BREVO_API_KEY`, `MAIL_FROM`, `OPENAI_API_KEY`, `CORS_ORIGINS` |
-| `Auth/server/` | `MONGO_CONN`, `JWT_SECRET` (different from Users'), `JWT_PROVIDER_SECRET`, `GATEWAY_PUBLIC_KEY`, `TRUSTED_ISSUERS`, `INTERNAL_AUTH_SECRET`, `BREVO_API_KEY`, `MAIL_FROM`, `CORS_ORIGINS`, `FORM_ACTION_ORIGINS` |
-| `Amazon/` & `Walmart/` | `MONGO_CONN`, `SECRET` (same as Auth's `JWT_PROVIDER_SECRET`), `AUTH_SERVER_URL`, `INTERNAL_AUTH_SECRET`, `TT_GATEWAY_URL`, `TRENDY_TREASURES_URL`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `CORS_ORIGINS` |
-| `client/` | `REACT_APP_API_URL`, `REACT_APP_AUTH_URL`, `REACT_APP_CLIENT_URL`, `REACT_APP_AMAZON_CHECKOUT_URL`, `REACT_APP_WALMART_CHECKOUT_URL` (all build-time) |
-| `Auth/client/` | `REACT_APP_AUTH_URL` (build-time) |
+The current deployment is intentionally conservative:
 
-**Which secrets must match across services:**
+- provider tokens are cached for short periods to reduce database reads
+- active-token introspection is cached briefly at the provider layer
+- AI price advice is cached for six hours per product
+- each backend is capped at one Cloud Run instance while exact rate-limit and replay semantics are in memory
 
-- `JWT_PROVIDER_SECRET` (Auth) = `SECRET` (Amazon) = `SECRET` (Walmart). If they don't match, every product request fails.
-- `INTERNAL_AUTH_SECRET` must be the same on all five backends. If they don't match, internal callbacks silently fail (carts won't clear, alerts won't fire).
-- `GATEWAY_PRIVATE_KEY` lives only on the gateway; `GATEWAY_PUBLIC_KEY` lives only on Auth. Generate them with `node genkeys.js`.
-- Users' `JWT_SECRET` and Auth's `JWT_SECRET` are **two separate values** — same env var name, different domains.
+Horizontal scaling should come after those shared-state concerns move to Redis or another centralized store.
 
-### Google sign-in ("Continue with Google")
+## Testing and Quality
 
-Both the storefront and AuthShield support Google sign-in. It is **optional** — leave the three `GOOGLE_*` vars empty and the button redirects to `?error=google_unconfigured` instead of breaking.
+Automated coverage currently focuses on the highest-risk infrastructure and authentication paths.
 
-The two apps are **separate OAuth surfaces with separate user tables**, and this project uses a **separate OAuth client for each** (both live in the same Google Cloud project). A redirect URI added to one client does *not* apply to the other. Create them at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials) → *Create credentials* → *OAuth client ID* → *Web application*.
-
-**Authorized redirect URIs** (all four, exactly — Google does prefix-free exact matching):
-
-| App | OAuth client | Local | Production |
-|---|---|---|---|
-| Storefront (via gateway) | `...6paebbjvpk...` | `http://localhost:7000/api/v1/user/auth/google/callback` | `https://trendy-gateway-ppa6nvipwa-pd.a.run.app/api/v1/user/auth/google/callback` |
-| AuthShield (direct) | `...cn48pr91cg...` | `http://localhost:5000/auth/google/callback` | `https://trendy-auth-ppa6nvipwa-pd.a.run.app/auth/google/callback` |
-
-The redirect URI is a **backend** URL — that is where the code-for-token exchange happens, because that is the only place the client secret lives. The SPA's own `/auth/google/callback` route is where the *backend* sends the browser afterwards; it must never be registered with Google.
-
-**Authorized JavaScript origins:**
-
-| App | Local | Production |
-|---|---|---|
-| Storefront | `http://localhost:3001` | `https://ecommerce-test-qvvv.vercel.app` |
-| AuthShield | `http://localhost:3002` | `https://ecommerce-test-lemon-xi.vercel.app` |
-
-Then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in both `Users/.env` and `Auth/server/.env` for local development. In production, the client IDs and redirect URIs are Cloud Run environment variables while the Google client secrets are injected from Google Secret Manager. Each service gets **its own** client's ID/secret plus its own redirect URI from the table above. Set all three or none — a partially configured client aborts boot in production.
-
-> **The storefront's redirect URI must point at the gateway, not at Users directly.** The SPA reaches Users through the gateway, so the OAuth round-trip has to end on the gateway's origin — otherwise the `user_google_oauth_state` cookie and the session cookies are set on a hostname the SPA never sends cookies to. Locally this is invisible (`localhost:7000` and `localhost:7001` share one cookie jar); in production the Cloud Run services use separate hosts, so sending the callback directly to Users would fail with `google_state_invalid`.
-
-An email that already has a **password** account cannot be claimed via Google (`?error=email_already_registered`) — that guard exists on both services so nobody can take over an account by registering the matching Google address.
-
----
-
-## 10. Production deployment
-
-Production is split between **Vercel** for the two React SPAs and **Google Cloud Run** for all five backend services.
-
-| Component | Production URL |
-|---|---|
-| Storefront | `https://ecommerce-test-qvvv.vercel.app` |
-| AuthShield | `https://ecommerce-test-lemon-xi.vercel.app` |
-| API Gateway | `https://trendy-gateway-ppa6nvipwa-pd.a.run.app` |
-| Users | `https://trendy-users-ppa6nvipwa-pd.a.run.app` |
-| Auth server | `https://trendy-auth-ppa6nvipwa-pd.a.run.app` |
-| Amazon provider | `https://trendy-amazon-ppa6nvipwa-pd.a.run.app` |
-| Walmart provider | `https://trendy-walmart-ppa6nvipwa-pd.a.run.app` |
-
-All Cloud Run services run in Toronto (`northamerica-northeast2`). Source deployments build each service's Dockerfile with **Cloud Build** and store the resulting images in **Artifact Registry**.
-
-Production secrets are stored in **Google Secret Manager** and injected into Cloud Run revisions. Each backend has its own runtime service account with access only to the secrets it needs. The shared `INTERNAL_AUTH_SECRET` is intentionally common across the five backends, and Auth's `JWT_PROVIDER_SECRET` is the same value exposed to Amazon/Walmart as `SECRET`.
-
-The current deployment keeps `--max-instances 1` while rate-limit counters, replay protection, and provider-token caches are in memory. Before scaling horizontally, move those shared-state concerns to Redis or another centralized store.
-
-The scheduled price-snapshot workflow in `.github/workflows/snapshot-tracked-prices.yml` calls the Cloud Run gateway every six hours using the GitHub Actions `GATEWAY_URL` and `INTERNAL_AUTH_SECRET` repository secrets.
-
-For the full deployment/runbook, see [`CLOUD_RUN_DEPLOYMENT.md`](CLOUD_RUN_DEPLOYMENT.md).
-
----
-
-## 11. Running locally
-
-### What you need
-
-- Node.js 20+, Python 3.12, MongoDB (local or Atlas)
-- Stripe test keys, a Brevo API key with a verified sender, an OpenAI key (only if you want to test AI features)
-
-### Install dependencies
-
-```powershell
-# Node services
-cd APIGateway   ; npm install ; cd ..
-cd Users        ; npm install ; cd ..
-cd Auth\server  ; npm install ; cd ..\..
-cd Amazon       ; npm install ; cd ..
-cd client       ; npm install ; cd ..
-cd Auth\client  ; npm install ; cd ..\..
-
-# Python service
-cd Walmart      ; pip install -r requirements.txt ; cd ..
+```bash
+cd APIGateway && npm test
+cd Auth/server && npm test
+cd Walmart && python -m unittest discover
+cd client && npm test
 ```
 
-### Generate the gateway keypair
+The suites cover provider-token refresh/retry behavior, proxy configuration, rate-limit identity, Auth signup/login/refresh flows, CSRF, OAuth state handling, token invalidation and Walmart client-identity behavior.
 
-```powershell
-node genkeys.js
+Users and Amazon still need fuller dedicated automated suites; that remains a known quality gap rather than being hidden behind a coverage claim.
+
+## Repository Structure
+
+```text
+client/              Storefront and admin React SPA
+APIGateway/          Public API gateway and provider-token orchestration
+Users/               Shopper/admin, cart, checkout, price and AI domain
+Auth/
+├── client/           AuthShield developer SPA
+└── server/           Developer accounts and provider credential service
+Amazon/              Node.js provider implementation
+Walmart/             Python/Flask provider implementation
+docs/                Architecture, security, API and data-model documentation
+docker-compose.yml   Local multi-service environment
+CLOUD_RUN_DEPLOYMENT.md
 ```
 
-Paste the **PRIVATE** key into `APIGateway/.env` as `GATEWAY_PRIVATE_KEY`. Paste the **PUBLIC** key into `Auth/server/.env` as `GATEWAY_PUBLIC_KEY`.
+## Getting Started
 
-### Start everything
+You need Node.js, Python, MongoDB, Stripe test keys, and the service-specific environment values documented in each `.env.example`.
 
-**With Docker Compose** (easier) — one command runs MongoDB and all five backends:
+```bash
+git clone https://github.com/CHAITANYAGANDI/Trendy_Treasures.git
+cd Trendy_Treasures
 
-```powershell
+# configure each service from its .env.example
 docker compose up --build
 ```
 
-Then in two more terminals:
+Then start the two SPAs:
 
 ```powershell
-cd client       ; npm start    # storefront on :3001
-cd Auth\client  ; npm start    # auth client on :3002
+cd client
+npm install
+npm start
+
+# separate terminal
+cd Auth/client
+npm install
+npm start
 ```
 
-**Without Docker** — open seven terminals:
+Local defaults:
 
-```powershell
-cd APIGateway   ; node app.js  # :7000
-cd Users        ; node app.js  # :7001
-cd Auth\server  ; node app.js  # :5000
-cd Amazon       ; node app.js  # :8000
-cd Walmart      ; python app.py # :8001
-cd client       ; npm start    # :3001
-cd Auth\client  ; npm start    # :3002
+- Storefront: `http://localhost:3001`
+- AuthShield: `http://localhost:3002`
+- Gateway: `http://localhost:7000`
+- Users: `http://localhost:7001`
+- Auth: `http://localhost:5000`
+- Amazon: `http://localhost:8000`
+- Walmart: `http://localhost:8001`
+
+Generate the Gateway/Auth RSA keypair with:
+
+```bash
+node genkeys.js
 ```
 
-### Check that everything is up
+## Configuration
 
-```powershell
-curl http://localhost:7000/health    # gateway
-curl http://localhost:7001/health    # users
-curl http://localhost:5000/health    # auth-server
-curl http://localhost:8000/health    # amazon
-curl http://localhost:8001/health    # walmart
-```
+Each service's `.env.example` is the source of truth for local configuration.
 
-Each one returns `{ "status": "ok", "mongoState": 1 }`. To trace a single request across services, grep its `x-request-id`:
+Production secrets are not committed. Cloud Run reads sensitive values from Google Secret Manager, while Vercel stores the React build-time environment variables.
 
-```
-[gateway] [a1b2c3d4-...] GET /api/v1/user/auth/me
-[users]   [a1b2c3d4-...] GET /auth/me
-```
+The cross-service trust relationships that must remain consistent are documented in **[CLOUD_RUN_DEPLOYMENT.md](CLOUD_RUN_DEPLOYMENT.md)**.
 
-### Smoke test
+## Documentation
 
-1. Sign up at `/signup`, enter the OTP, land on `/home`.
-2. Create the first admin (using curl, because no admin exists yet):
-   ```bash
-   curl -X POST http://localhost:7000/api/v1/user/admin/register \
-     -H "Content-Type: application/json" \
-     -d '{"name":"Admin","adminId":"you@example.com","password":"AdminPass!1"}'
-   ```
-3. Log in as the admin at `/admin/login` and walk through the provider authorize flow at `/admin/auth/request`.
-4. Browse products → add to cart → checkout with the Stripe test card `4242 4242 4242 4242` → confirm the cart clears after the order completes.
-
----
-
-## 12. Testing
-
-The Auth server has the most complete test suite:
-
-```powershell
-cd Auth\server
-npm test
-```
-
-It covers signup/login/me, generic error responses, refresh token rotation, `tokenVersion` invalidation, CSRF, opaque forgot-password, fail-closed introspection, OAuth state validation, body-size caps, and readiness checks.
-
-The other services currently have placeholder test scripts. The next CI investment would be tests for the Gateway (token refresh and retry), Users (auth/CSRF/cart isolation/checkout), and the provider services (Stripe verification and idempotency).
-
----
-
-## 13. Documentation map
-
-This README is the overview. Deeper docs live in [`docs/`](docs/):
-
-| File | What it covers |
+| Document | Covers |
 |---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System diagrams, sequence diagrams for every cross-service flow, service cards, shared concerns |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Assets and adversaries, STRIDE threat model, OWASP Top 10 controls, cryptography inventory, known gaps |
-| [`docs/API.md`](docs/API.md) | Every endpoint with `curl` examples, success/error responses, internal service-to-service routes |
-| [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) | ER diagrams per database, collection-by-collection notes, full index list |
+| [CLOUD_RUN_DEPLOYMENT.md](CLOUD_RUN_DEPLOYMENT.md) | Production deployment and operational checks |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Service boundaries and end-to-end flows |
+| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, controls and known gaps |
+| [docs/API.md](docs/API.md) | Public and internal API reference |
+| [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Collections, indexes and ownership |
 
----
+## Engineering Decisions and Trade-offs
 
-## License
+**Aggregator + provider handoff** — Trendy Treasures owns discovery and cart state, while providers own checkout and orders. That keeps provider payment logic outside the aggregator.
 
-ISC (matches the existing `package.json` files).
+**Gateway-held provider credentials** — the browser never receives provider access tokens. The cost is more gateway responsibility, including refresh, caching and retry behavior.
+
+**Node.js + Python providers** — the duplicated provider contract is intentional: it demonstrates that HTTP/JWT boundaries are independent of implementation language.
+
+**Separate MongoDB ownership** — Auth, Amazon and Walmart own their data independently; Gateway and Users share only the storefront data that both need.
+
+**Public Cloud Run services + application auth** — the first production deployment keeps services reachable while CORS, JWTs, internal secrets and rate limits protect application paths. Private/IAM-only service traffic is a future hardening step.
+
+**One instance before shared state** — exact per-IP limits, replay protection and caches are more important than horizontal scaling for the current portfolio workload.
+
+## Current Limitations
+
+- Amazon and Walmart are simulated providers rather than real marketplace integrations.
+- Stripe runs in test mode.
+- Rate-limit counters, replay protection and several caches are per-instance.
+- Cloud Run is intentionally capped at one instance per backend.
+- Atlas currently uses public network connectivity rather than static private egress.
+- Users and Amazon need broader automated test coverage.
+- Releases are not fully automated end to end.
+
+## How Trendy Treasures Can Be Improved
+
+- **Redis-backed shared state** — move rate limits, replay protection and caches out of process, then scale Cloud Run horizontally.
+- **Private service-to-service traffic** — add IAM-authenticated calls and private ingress where browser access is not required.
+- **Restricted Atlas networking** — route Cloud Run through static egress and narrow the Atlas allowlist.
+- **Broader automated testing** — add Users, Amazon and full checkout integration suites.
+- **Edge protection and observability** — add Cloud Armor and centralized security/payment alerts.
+- **Release automation** — automate Cloud Run and Vercel deployment verification after merges.
+
+## Acknowledgements
+
+Trendy Treasures was designed and developed with the assistance of AI development tools, including Claude and ChatGPT, for areas such as implementation, debugging, architecture review and documentation.
+
+The project uses open-source frameworks and libraries that remain subject to their respective licenses. Amazon and Walmart are simulated provider implementations used only to demonstrate the architecture; no affiliation with those companies is claimed.
