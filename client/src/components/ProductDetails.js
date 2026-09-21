@@ -19,10 +19,8 @@ import PriceHistoryChart from './PriceHistoryChart';
 import TrackPriceModal from './TrackPriceModal';
 import PriceAdvisorWidget from './PriceAdvisorWidget';
 import ProductQAChat from './ProductQAChat';
+import SourcePill from './SourcePill';
 import '../ProductDetails.css';
-
-const AMAZON_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg';
-const WALMART_LOGO = 'https://i5.walmartimages.com/dfw/63fd9f59-b3e1/7a569e53-f29a-4c3d-bfaf-6f7a158bfadd/v1/walmartLogo.svg';
 
 const ratingFor = (id) => {
   if (!id) return 4.4;
@@ -180,7 +178,6 @@ function ProductDetails() {
   const reviews = reviewsFor(product._id || productId);
   const inStock = !!product.inStock;
   const sourceLabel = source === 'amazon' ? 'Amazon' : 'Walmart';
-  const sourceLogo = source === 'amazon' ? AMAZON_LOGO : WALMART_LOGO;
   const filledStars = Math.max(1, Math.min(5, Math.round(rating)));
   const aboutItems = (
     Array.isArray(product.features) && product.features.length > 0
@@ -225,28 +222,18 @@ function ProductDetails() {
                   alt={product.name}
                   className="w-full h-full max-h-[680px] object-contain p-8 sm:p-10"
                 />
-                <span
-                  className={`absolute top-4 left-4 ${
-                    source === 'amazon' ? 'source-pill-amazon' : 'source-pill-walmart'
-                  }`}
-                >
-                  <img src={sourceLogo} alt="" className="h-3" />
-                  Sold on {sourceLabel}
-                </span>
+                <SourcePill
+                  provider={source}
+                  prefix="Sold on"
+                  className="absolute top-4 left-4"
+                />
               </div>
             </div>
           </section>
 
           <section className="space-y-6">
             <div className="border-b border-ink-200/70 pb-5">
-              <span
-                className={`${
-                  source === 'amazon' ? 'source-pill-amazon' : 'source-pill-walmart'
-                }`}
-              >
-                <img src={sourceLogo} alt="" className="h-3" />
-                {sourceLabel}
-              </span>
+              <SourcePill provider={source} />
 
               <h1 className="mt-4 text-2xl sm:text-3xl xl:text-4xl font-semibold text-ink-900 tracking-tight leading-tight">
                 {product.name}

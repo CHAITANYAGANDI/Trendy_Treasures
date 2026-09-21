@@ -15,10 +15,8 @@ import {
 } from '../utils';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
+import SourcePill from './SourcePill';
 import '../Cart.css';
-
-const AMAZON_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg';
-const WALMART_LOGO = 'https://i5.walmartimages.com/dfw/63fd9f59-b3e1/7a569e53-f29a-4c3d-bfaf-6f7a158bfadd/v1/walmartLogo.svg';
 
 const normalizeSource = (source) => {
   const value = String(source || '').trim().toLowerCase();
@@ -303,18 +301,7 @@ function Cart() {
                         </button>
                       </div>
 
-                      <span
-                        className={`mt-2 ${
-                          src === 'amazon' ? 'source-pill-amazon' : 'source-pill-walmart'
-                        }`}
-                      >
-                        <img
-                          src={src === 'amazon' ? AMAZON_LOGO : WALMART_LOGO}
-                          alt=""
-                          className="h-3"
-                        />
-                        Sold on {src === 'amazon' ? 'Amazon' : 'Walmart'}
-                      </span>
+                      <SourcePill provider={src} prefix="Sold on" className="mt-2" />
 
                       <div className="mt-3 flex flex-wrap items-center gap-3 justify-between">
                         <div className="flex items-center gap-2">

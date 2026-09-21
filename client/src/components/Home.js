@@ -12,10 +12,8 @@ import {
 } from '../utils';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
+import SourcePill from './SourcePill';
 import '../Home.css';
-
-const AMAZON_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg';
-const WALMART_LOGO = 'https://i5.walmartimages.com/dfw/63fd9f59-b3e1/7a569e53-f29a-4c3d-bfaf-6f7a158bfadd/v1/walmartLogo.svg';
 
 const ITEMS_PER_PAGE = 12;
 
@@ -467,18 +465,7 @@ function Home() {
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
                     />
-                    <span
-                      className={`absolute top-3 left-3 ${
-                        item.source === 'amazon' ? 'source-pill-amazon' : 'source-pill-walmart'
-                      }`}
-                    >
-                      <img
-                        src={item.source === 'amazon' ? AMAZON_LOGO : WALMART_LOGO}
-                        alt=""
-                        className={`h-3 ${item.source === 'walmart' ? 'invert-0' : ''}`}
-                      />
-                      {item.source === 'amazon' ? 'Amazon' : 'Walmart'}
-                    </span>
+                    <SourcePill provider={item.source} className="absolute top-3 left-3" />
                     {!item.inStock && (
                       <span className="absolute top-3 right-3 chip-danger">
                         Out of stock
