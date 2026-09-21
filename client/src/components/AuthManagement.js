@@ -1,63 +1,36 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FaKey, FaShieldAlt, FaArrowRight, FaInfoCircle } from 'react-icons/fa';
+import React, { useState } from 'react';
 import AdminShell from './AdminShell';
+import AuthorizedApis from './AuthorizedApis';
+import AuthRequestSheet from './AuthRequestSheet';
 
+/**
+ * Auth management is the connections themselves — nothing else.
+ *
+ * Requesting a new one is a dialog over this list, and the explanation of
+ * what the OAuth hand-off actually does lives on the How it works page.
+ */
 function AuthManagement() {
-    const navigate = useNavigate();
+    const [requestOpen, setRequestOpen] = useState(false);
 
     return (
         <AdminShell
             title="Auth management"
-            subtitle="Manage authorization grants and inspect connected provider APIs."
+            subtitle="Connected stores and their tokens."
+            actions={
+                <button
+                    type="button"
+                    onClick={() => setRequestOpen(true)}
+                    className="btn btn-blue btn-sm"
+                >
+                    Request API authorization
+                </button>
+            }
         >
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <button
-                    onClick={() => navigate('/admin/auth/request')}
-                    className="card-interactive p-6 text-left group"
-                >
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center shadow-lg">
-                        <FaKey />
-                    </div>
-                    <h3 className="mt-5 font-bold text-ink-900 flex items-center justify-between">
-                        Request API authorization
-                        <FaArrowRight className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all text-sm" />
-                    </h3>
-                    <p className="mt-2 text-sm text-ink-600 leading-relaxed">
-                        Start an OAuth-style flow against an external provider's auth server
-                        and store the resulting access token.
-                    </p>
-                </button>
-
-                <button
-                    onClick={() => navigate('/admin/auth/protected')}
-                    className="card-interactive p-6 text-left group"
-                >
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 text-white flex items-center justify-center shadow-lg">
-                        <FaShieldAlt />
-                    </div>
-                    <h3 className="mt-5 font-bold text-ink-900 flex items-center justify-between">
-                        Authorized APIs
-                        <FaArrowRight className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all text-sm" />
-                    </h3>
-                    <p className="mt-2 text-sm text-ink-600 leading-relaxed">
-                        Inspect which APIs we currently hold valid tokens for and confirm
-                        the gateway can reach them.
-                    </p>
-                </button>
-
-                <div className="glass rounded-3xl p-6">
-                    <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-700 flex items-center justify-center">
-                        <FaInfoCircle />
-                    </div>
-                    <h3 className="mt-5 font-bold text-ink-900">How it works</h3>
-                    <p className="mt-2 text-sm text-ink-600 leading-relaxed">
-                        The API Gateway injects a stored <code className="px-1.5 py-0.5 rounded bg-white/70 text-xs">productsauthorization</code>{' '}
-                        header on every Amazon / Walmart product request. Tokens are
-                        cached in-memory for 60s.
-                    </p>
-                </div>
+            <div className="max-w-[1220px]">
+                <AuthorizedApis onRequest={() => setRequestOpen(true)} />
             </div>
+
+            <AuthRequestSheet open={requestOpen} onClose={() => setRequestOpen(false)} />
         </AdminShell>
     );
 }

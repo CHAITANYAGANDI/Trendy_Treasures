@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { FaCheck, FaTimes, FaInfoCircle } from 'react-icons/fa';
+import { Check, X, Info } from 'lucide-react';
 
 /**
- * Apple-style centered glass pill toast. Listens to a `center-toast` custom
- * event so utility functions outside the React tree can fire it. Replaces
- * react-toastify so we have one consistent look across the storefront and
- * the auth/admin pages.
+ * Glass pill toast, pinned to the top centre of the window and clear of
+ * the 56px sticky header. Listens to a `center-toast` custom event so
+ * utility functions outside the React tree can fire it — the event name is
+ * part of the bus in utils.js and is left alone.
  */
 function CenterToast() {
     const [toasts, setToasts] = useState([]);
@@ -33,26 +33,31 @@ function CenterToast() {
     return (
         <div
             aria-live="polite"
-            className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center flex-col gap-3 px-4"
+            className="fixed inset-x-0 top-0 z-[9999] pointer-events-none flex flex-col items-center gap-3 px-4 pt-[72px]"
         >
             {toasts.map((t) => (
                 <div
                     key={t.id}
-                    className={`${t.leaving ? 'ct-leaving' : 'ct-entering'} inline-flex items-center gap-3 px-5 py-3 pr-6 rounded-full text-white font-medium text-sm bg-ink-900/80 backdrop-blur-xl backdrop-saturate-150 border border-white/10 shadow-2xl shadow-ink-900/20 max-w-[80vw]`}
-                    style={{ minWidth: 240 }}
+                    className={`toast ${t.leaving ? 'animate-toastOut' : 'animate-toastIn'}`}
                 >
                     <span
-                        className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-white text-xs shadow-md ${
+                        className={`toast-dot ${
                             t.kind === 'error'
-                                ? 'bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/30'
+                                ? 'toast-dot-bad'
                                 : t.kind === 'info'
-                                ? 'bg-gradient-to-br from-sky-400 to-cyan-600 shadow-cyan-500/30'
-                                : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/30'
+                                  ? 'toast-dot-info'
+                                  : ''
                         }`}
                     >
-                        {t.kind === 'error' ? <FaTimes /> : t.kind === 'info' ? <FaInfoCircle /> : <FaCheck />}
+                        {t.kind === 'error' ? (
+                            <X size={12} aria-hidden="true" />
+                        ) : t.kind === 'info' ? (
+                            <Info size={12} aria-hidden="true" />
+                        ) : (
+                            <Check size={12} aria-hidden="true" />
+                        )}
                     </span>
-                    <span className="leading-snug tracking-tight">{t.message}</span>
+                    <span>{t.message}</span>
                 </div>
             ))}
         </div>

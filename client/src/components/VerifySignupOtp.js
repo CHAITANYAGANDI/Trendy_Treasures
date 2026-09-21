@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaArrowRight } from 'react-icons/fa';
 import { handleError, handleSuccess, apiFetch } from '../utils';
 import AuthLayout from './AuthLayout';
+import { Passcode } from './ui/Primitives';
 
 function VerifySignupOtp() {
     const [otp, setOtp] = useState('');
@@ -38,37 +38,32 @@ function VerifySignupOtp() {
         <AuthLayout
             title="Verify your email"
             subtitle="We sent a 4-digit code to your email. Enter it below to finish creating your account."
-            panelTitle="One last step."
-            panelSubtitle="Verifying your email keeps your cart and order history safe — and stops anyone else from signing up with it."
             footer={
                 <>
                     Wrong email?{' '}
-                    <Link to="/signup" className="font-semibold text-brand-700 hover:underline">
-                        Start over
-                    </Link>
+                    <Link to="/signup" className="link font-medium">Start over</Link>
                 </>
             }
         >
-            <form onSubmit={handleVerifyOtp} className="space-y-5">
-                <div>
-                    <label htmlFor="otp" className="field-label">4-digit code</label>
-                    <input
-                        id="otp"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        placeholder="• • • •"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                        maxLength="4"
-                        required
-                        autoFocus
-                        className="field-input text-center !text-3xl !tracking-[0.6em] !font-bold"
-                    />
-                </div>
-                <button type="submit" disabled={submitting} className="btn-primary w-full !py-3.5">
-                    {submitting ? 'Verifying…' : <>Verify and continue <FaArrowRight className="text-xs" /></>}
+            <form onSubmit={handleVerifyOtp}>
+                {/* Four boxes over the one `otp` string this page already
+                    kept in state — nothing about the request changed. */}
+                <Passcode value={otp} onChange={setOtp} autoFocus ariaLabel="4-digit code" />
+
+                {/* Deliberately not disabled on a short code — submitting
+                    one still raises "Please enter a 4-digit OTP", which is
+                    the feedback this page has always given. */}
+                <button
+                    type="submit"
+                    disabled={submitting}
+                    className="btn btn-blue btn-lg btn-full mt-7"
+                >
+                    {submitting ? 'Verifying…' : 'Verify and continue'}
                 </button>
+
+                <p className="text-cap dim text-center mt-4 leading-relaxed">
+                    Nothing is saved to your account until this code is verified.
+                </p>
             </form>
         </AuthLayout>
     );

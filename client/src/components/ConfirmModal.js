@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { FaExclamationTriangle } from 'react-icons/fa';
+import { AlertTriangle, HelpCircle } from 'lucide-react';
+import { Sheet } from './ui/Primitives';
 
 /**
  * Custom replacement for the browser's native window.confirm. Listens to a
@@ -45,80 +46,74 @@ function ConfirmModal() {
         return () => window.removeEventListener('center-confirm', handler);
     }, []);
 
+    // Escape is handled by <Sheet>, which also traps focus and locks the
+    // page behind. Enter-to-confirm is this dialog's own behaviour.
     useEffect(() => {
-        if (!dialog) return;
+        if (!dialog) return undefined;
         const onKey = (e) => {
-            if (e.key === 'Escape') close(false);
             if (e.key === 'Enter') close(true);
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [dialog, close]);
 
+    const onCancel = useCallback(() => close(false), [close]);
+
     if (!dialog) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-title"
+        <Sheet
+            open
+            onClose={onCancel}
+            labelledBy="confirm-title"
+            describedBy={dialog.body ? 'confirm-body' : undefined}
         >
-            <div
-                className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm"
-                onClick={() => close(false)}
-                aria-hidden="true"
-            />
-            <div className="relative w-full max-w-md glass-strong rounded-3xl p-7 animate-pop shadow-2xl">
-                <div className="flex items-start gap-4">
-                    <div
-                        className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center shadow-md ${
-                            dialog.danger
-                                ? 'bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-red-500/30'
-                                : 'bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-brand-500/30'
-                        }`}
-                    >
-                        <FaExclamationTriangle />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <h2
-                            id="confirm-title"
-                            className="text-lg font-bold text-ink-900 tracking-tight"
-                        >
-                            {dialog.title}
-                        </h2>
-                        {dialog.body && (
-                            <p className="mt-2 text-sm text-ink-600 leading-relaxed">
-                                {dialog.body}
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="mt-7 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5">
-                    <button
-                        type="button"
-                        onClick={() => close(false)}
-                        className="btn-secondary"
-                        autoFocus={!dialog.danger}
-                    >
-                        {dialog.cancelLabel}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => close(true)}
-                        className={
-                            dialog.danger
-                                ? 'inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white font-semibold text-sm shadow-lg shadow-red-500/30 hover:brightness-110 hover:shadow-xl hover:shadow-red-500/40 active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-red-500/30 transition-all duration-200'
-                                : 'btn-primary'
-                        }
-                        autoFocus={dialog.danger}
-                    >
-                        {dialog.confirmLabel}
-                    </button>
+            <div className="flex items-start gap-4">
+                <span
+                    className={`w-11 h-11 shrink-0 rounded-fld grid place-items-center ${
+                        dialog.danger ? 'bg-redWash text-red' : 'bg-haze text-ink'
+                    }`}
+                >
+                    {dialog.danger ? (
+                        <AlertTriangle size={19} aria-hidden="true" />
+                    ) : (
+                        <HelpCircle size={19} aria-hidden="true" />
+                    )}
+                </span>
+                <div className="flex-1 min-w-0">
+                    <h2 id="confirm-title" className="t-h4">
+                        {dialog.title}
+                    </h2>
+                    {dialog.body && (
+                        <p id="confirm-body" className="t-ui dim mt-2 leading-relaxed">
+                            {dialog.body}
+                        </p>
+                    )}
                 </div>
             </div>
-        </div>
+
+            {/* Initial focus is handled by <Sheet>, which lands on Cancel —
+                the safe default on a destructive confirm. Enter still
+                confirms, exactly as before. */}
+            <div className="mt-7 flex gap-2.5">
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    className="btn btn-quiet btn-lg flex-1"
+                >
+                    {dialog.cancelLabel}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => close(true)}
+                    className={`btn btn-lg flex-1 ${
+                        dialog.danger ? 'btn-danger-solid' : 'btn-blue'
+                    }`}
+                >
+                    {dialog.confirmLabel}
+                </button>
+            </div>
+        </Sheet>
     );
 }
 

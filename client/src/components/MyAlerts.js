@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaBell, FaTrashAlt, FaExternalLinkAlt, FaArrowLeft } from 'react-icons/fa';
+import { BellRing, Trash2, ChevronLeft } from 'lucide-react';
 import {
     deletePriceAlert,
     fetchCurrentUser,
@@ -11,6 +11,8 @@ import {
 } from '../utils';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
+import SourcePill from './SourcePill';
+import { EmptyState, Spinner } from './ui/Primitives';
 
 const fmtPrice = (n) => `$${Number(n).toFixed(2)}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -77,97 +79,97 @@ function MyAlerts() {
         <div className="min-h-screen flex flex-col">
             <SiteHeader currentUser={currentUser} setCurrentUser={setCurrentUser} showSearch={false} />
 
-            <main className="store-shell py-6 lg:py-8 flex-1">
-                <button onClick={() => navigate(-1)} className="btn-ghost mb-6">
-                    <FaArrowLeft className="text-xs" /> Back
-                </button>
-
-                <div className="max-w-3xl mx-auto">
-                    <header className="mb-6 flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-brand-gradient text-white flex items-center justify-center shadow-md shadow-brand-500/40">
-                            <FaBell className="text-xl" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-ink-900">Price alerts</h1>
-                            <p className="text-sm text-ink-500">
-                                We'll email you when any of these products drop below your threshold.
-                            </p>
-                        </div>
-                    </header>
-
-                    {loading ? (
-                        <div className="card p-10 text-center text-ink-500 animate-pulse">Loading alerts…</div>
-                    ) : alerts && alerts.length === 0 ? (
-                        <div className="card p-10 text-center">
-                            <p className="text-ink-700 font-medium">No price alerts yet.</p>
-                            <p className="text-sm text-ink-500 mt-1">
-                                Open any product, scroll to the chart, and tap <em>Track price</em>.
-                            </p>
-                            <Link to="/home" className="btn-primary mt-5 inline-flex">Browse products</Link>
-                        </div>
-                    ) : (
-                        <ul className="space-y-3">
-                            {(alerts || []).map((alert) => {
-                                const providerLabel = alert.provider.charAt(0).toUpperCase() + alert.provider.slice(1);
-                                const lastNotified = alert.last_notified_at
-                                    ? `last notified ${fmtDate(alert.last_notified_at)}`
-                                    : 'never notified';
-                                return (
-                                    <li
-                                        key={alert._id}
-                                        className="card flex items-center gap-4 p-4"
-                                    >
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span
-                                                    className={
-                                                        alert.provider === 'amazon'
-                                                            ? 'source-pill-amazon'
-                                                            : 'source-pill-walmart'
-                                                    }
-                                                >
-                                                    {providerLabel}
-                                                </span>
-                                                <span className="text-[11px] text-ink-500">
-                                                    created {fmtDate(alert.created_at)} · {lastNotified}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm font-semibold text-ink-900 truncate">
-                                                {alert.product_name}
-                                            </p>
-                                            <p className="text-xs text-ink-600 mt-1">
-                                                Notify when price ≤{' '}
-                                                <span className="font-bold text-ink-900">{fmtPrice(alert.threshold_price)}</span>
-                                                {' · '}
-                                                <span className="text-ink-500">
-                                                    last known {fmtPrice(alert.last_known_price)}
-                                                </span>
-                                            </p>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <Link
-                                                to={`/product/${alert.provider}/${alert.product_id}`}
-                                                className="btn-secondary !py-2 !px-3 text-xs"
-                                                title="View product"
-                                            >
-                                                <FaExternalLinkAlt /> View
-                                            </Link>
-                                            <button
-                                                onClick={() => handleDelete(alert)}
-                                                className="p-2.5 rounded-full text-red-600 hover:bg-red-50 transition-colors"
-                                                aria-label="Stop tracking"
-                                                title="Stop tracking"
-                                            >
-                                                <FaTrashAlt />
-                                            </button>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
+            <div className="pagebar">
+                <div className="pagebar-inner">
+                    <button type="button" onClick={() => navigate(-1)} className="btn btn-plain !px-0">
+                        <ChevronLeft size={15} aria-hidden="true" /> Back
+                    </button>
                 </div>
+            </div>
+
+            <main className="shell-page py-8 md:py-12 flex-1 w-full">
+                <header className="mb-8">
+                    <h1 className="t-d3">Price alerts</h1>
+                    <p className="t-lead dim mt-2 measure">
+                        We'll email you when any of these products drop below your threshold.
+                    </p>
+                </header>
+
+                {loading ? (
+                    <div className="py-20 flex flex-col items-center gap-3">
+                        <Spinner size={24} />
+                        <p className="t-ui dim">Loading alerts…</p>
+                    </div>
+                ) : alerts && alerts.length === 0 ? (
+                    <EmptyState
+                        glyph={<BellRing size={38} className="glyph" aria-hidden="true" />}
+                        title="No price alerts yet."
+                        action={
+                            <Link to="/home" className="btn btn-blue btn-lg">
+                                Browse products
+                            </Link>
+                        }
+                    >
+                        Open any product, scroll to the chart, and tap <em>Track price</em>.
+                    </EmptyState>
+                ) : (
+                    <ul className="border-t border-hairline">
+                        {(alerts || []).map((alert) => {
+                            const lastNotified = alert.last_notified_at
+                                ? `last notified ${fmtDate(alert.last_notified_at)}`
+                                : 'never notified';
+                            return (
+                                <li
+                                    key={alert._id}
+                                    className="flex flex-wrap items-start gap-4 py-5 border-b border-hairlineSoft"
+                                >
+                                    <div className="flex-1 min-w-[220px]">
+                                        <div className="flex flex-wrap items-center gap-2.5">
+                                            <SourcePill provider={alert.provider} size="xs" />
+                                            <span className="t-cap dimmer">
+                                                created {fmtDate(alert.created_at)} · {lastNotified}
+                                            </span>
+                                        </div>
+
+                                        <p className="t-body font-medium mt-2 clamp2">
+                                            {alert.product_name}
+                                        </p>
+
+                                        <p className="t-ui dim mt-1.5">
+                                            Notify when price ≤{' '}
+                                            <span className="font-semibold text-ink tnum">
+                                                {fmtPrice(alert.threshold_price)}
+                                            </span>
+                                            {' · '}
+                                            <span className="dimmer tnum">
+                                                last known {fmtPrice(alert.last_known_price)}
+                                            </span>
+                                        </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <Link
+                                            to={`/product/${alert.provider}/${alert.product_id}`}
+                                            className="btn btn-quiet btn-sm"
+                                            title="View product"
+                                        >
+                                            View
+                                        </Link>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDelete(alert)}
+                                            className="icon-btn icon-btn-danger"
+                                            aria-label={`Stop tracking ${alert.product_name}`}
+                                            title="Stop tracking"
+                                        >
+                                            <Trash2 size={16} aria-hidden="true" />
+                                        </button>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </main>
 
             <SiteFooter />

@@ -466,7 +466,7 @@ const proxyProductRoute = (apiName, provider, target, prefix) => async (req, res
         upstreamRes.headers.forEach((value, key) => {
             const lk = key.toLowerCase();
             // Skip hop-by-hop + length headers; Express recomputes content-length.
-            if (lk === 'connection' || lk === 'transfer-encoding' || lk === 'content-length' || lk === 'content-encoding') return;
+            if (lk === 'connection' || lk === 'transfer-encoding' || lk === 'content-length' || lk === 'content-encoding' || lk.startsWith('access-control-')) return;
             res.setHeader(key, value);
         });
         res.send(body);

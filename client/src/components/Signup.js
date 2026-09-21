@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaArrowRight } from 'react-icons/fa';
+import { Eye, EyeOff } from 'lucide-react';
 import { handleSuccess, apiFetch, isStrongPassword, STRONG_PASSWORD_MESSAGE } from '../utils';
 import AuthLayout from './AuthLayout';
 import FormErrorBanner from './FormErrorBanner';
 import PasswordStrengthHint from './PasswordStrengthHint';
+import { Field } from './ui/Primitives';
 
 function Signup() {
     const [signupInfo, setSignupInfo] = useState({ name: '', email: '', password: '' });
     const [errorBanner, setErrorBanner] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
     const handleChange = (e) => {
@@ -58,67 +60,64 @@ function Signup() {
     return (
         <AuthLayout
             title="Create your account"
-            subtitle="Shop smarter across stores. Get started in under a minute."
-            panelTitle="The smartest way to shop across stores."
-            panelSubtitle="Sign up to track prices, get drop alerts, and ask AI for buy-or-wait advice — all in one cart, across Amazon, Walmart and more."
+            subtitle="One account for both stores. It takes under a minute."
             footer={
                 <>
                     Already have an account?{' '}
-                    <Link to="/login" className="font-semibold text-brand-700 hover:underline">
-                        Sign in
-                    </Link>
+                    <Link to="/login" className="link font-medium">Sign in</Link>
                 </>
             }
         >
-            <form onSubmit={handleSignup} className="space-y-4">
+            <form onSubmit={handleSignup} className="flex flex-col gap-3">
                 <FormErrorBanner message={errorBanner} />
+
+                <Field
+                    id="name"
+                    name="name"
+                    label="Full name"
+                    value={signupInfo.name}
+                    onChange={handleChange}
+                    autoFocus
+                    autoComplete="name"
+                />
+                <Field
+                    id="email"
+                    name="email"
+                    type="email"
+                    label="Email"
+                    value={signupInfo.email}
+                    onChange={handleChange}
+                    autoComplete="email"
+                    spellCheck="false"
+                />
                 <div>
-                    <label htmlFor="name" className="field-label">Full name</label>
-                    <input
-                        id="name"
-                        name="name"
-                        type="text"
-                        autoFocus
-                        autoComplete="name"
-                        placeholder="Jane Doe"
-                        value={signupInfo.name}
-                        onChange={handleChange}
-                        className="field-input"
-                    />
-                </div>
-                <div>
-                    <label htmlFor="email" className="field-label">Email</label>
-                    <input
-                        id="email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="you@example.com"
-                        value={signupInfo.email}
-                        onChange={handleChange}
-                        className="field-input"
-                    />
-                </div>
-                <div>
-                    <label htmlFor="password" className="field-label">Password</label>
-                    <input
+                    <Field
                         id="password"
                         name="password"
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder="At least 8 characters"
+                        type={showPassword ? 'text' : 'password'}
+                        label="Password"
                         value={signupInfo.password}
                         onChange={handleChange}
-                        className="field-input"
+                        autoComplete="new-password"
+                        trailing={
+                            <button
+                                type="button"
+                                className="field-reveal"
+                                onClick={() => setShowPassword((v) => !v)}
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                            </button>
+                        }
                     />
                     <PasswordStrengthHint password={signupInfo.password} />
                 </div>
 
-                <button type="submit" disabled={submitting} className="btn-primary w-full !py-3.5">
-                    {submitting ? 'Creating account…' : <>Create account <FaArrowRight className="text-xs" /></>}
+                <button type="submit" disabled={submitting} className="btn btn-blue btn-lg btn-full mt-2">
+                    {submitting ? 'Creating account…' : 'Create account'}
                 </button>
 
-                <p className="text-xs text-ink-500 text-center leading-relaxed">
+                <p className="text-cap dim text-center leading-relaxed mt-1">
                     By creating an account, you agree to our terms. We'll email you a
                     4-digit code to verify it's really you.
                 </p>

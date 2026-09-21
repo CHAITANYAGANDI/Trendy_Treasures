@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaArrowRight } from 'react-icons/fa';
+import { Eye, EyeOff } from 'lucide-react';
 import { handleError, handleSuccess, apiFetch } from '../utils';
 import AuthLayout from './AuthLayout';
+import PasswordStrengthHint from './PasswordStrengthHint';
+import { Field } from './ui/Primitives';
 
-function ResetPassword() {
+// Same screen for both audiences — see ForgotPassword for why.
+function ResetPassword({ admin = false }) {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    // Independent of the field above: revealing one to check a typo should
+    // not expose the other.
+    const [showConfirm, setShowConfirm] = useState(false);
     const navigate = useNavigate();
 
     const handleResetPassword = async (e) => {
@@ -25,7 +32,7 @@ function ResetPassword() {
             const result = await response.json();
             if (result.success) {
                 handleSuccess(result.message);
-                setTimeout(() => navigate('/login'), 800);
+                setTimeout(() => navigate(admin ? '/admin/login' : '/login'), 800);
             } else {
                 handleError(result.message);
             }
@@ -36,51 +43,81 @@ function ResetPassword() {
         }
     };
 
+    const mismatch = confirmPassword !== '' && password !== confirmPassword;
+
     return (
         <AuthLayout
+            dark={admin}
+            eyebrow={admin ? 'Admin portal' : null}
             title="Set a new password"
             subtitle="Choose something strong and unique. You'll use this from now on."
-            panelTitle="Choose a strong new password."
-            panelSubtitle="Use at least 8 characters with a mix of letters, numbers and symbols. We hash everything — your password is never stored in plaintext."
             footer={
                 <>
                     Changed your mind?{' '}
-                    <Link to="/login" className="font-semibold text-brand-700 hover:underline">
+                    <Link to={admin ? '/admin/login' : '/login'} className="link font-medium">
                         Back to sign in
                     </Link>
                 </>
             }
         >
-            <form onSubmit={handleResetPassword} className="space-y-4">
+            <form onSubmit={handleResetPassword} className="flex flex-col gap-3">
                 <div>
-                    <label htmlFor="password" className="field-label">New password</label>
-                    <input
+                    <Field
                         id="password"
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder="At least 8 characters"
+                        type={showPassword ? 'text' : 'password'}
+                        label="New password"
+                        className={admin ? 'field-dark' : ''}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
                         autoFocus
-                        className="field-input"
-                    />
-                </div>
-                <div>
-                    <label htmlFor="confirmPassword" className="field-label">Confirm new password</label>
-                    <input
-                        id="confirmPassword"
-                        type="password"
                         autoComplete="new-password"
-                        placeholder="Type it again"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        className="field-input"
+                        trailing={
+                            <button
+                                type="button"
+                                className="field-reveal"
+                                onClick={() => setShowPassword((v) => !v)}
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                            </button>
+                        }
                     />
+                    <PasswordStrengthHint password={password} />
                 </div>
-                <button type="submit" disabled={submitting} className="btn-primary w-full !py-3.5">
-                    {submitting ? 'Updating…' : <>Update password <FaArrowRight className="text-xs" /></>}
+
+                <Field
+                    id="confirmPassword"
+                    type={showConfirm ? 'text' : 'password'}
+                    label="Confirm new password"
+                    className={admin ? 'field-dark' : ''}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    autoComplete="new-password"
+                    error={mismatch}
+                    hint={mismatch ? 'Passwords do not match.' : undefined}
+                    hintBad={mismatch}
+                    trailing={
+                        <button
+                            type="button"
+                            className="field-reveal"
+                            onClick={() => setShowConfirm((v) => !v)}
+                            aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                        >
+                            {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                    }
+                />
+
+                <button
+                    type="submit"
+                    disabled={submitting}
+                    className={`btn btn-lg btn-full mt-2 ${
+                        admin ? '!bg-[#0a84ff] !text-white hover:!bg-[#3d9bff]' : 'btn-blue'
+                    }`}
+                >
+                    {submitting ? 'Updating…' : 'Update password'}
                 </button>
             </form>
         </AuthLayout>

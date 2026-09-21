@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../utils';
+import BrandMark from './BrandMark';
+import { Spinner } from './ui/Primitives';
 
 function ClientCallBack() {
   const navigate = useNavigate();
@@ -21,7 +23,7 @@ function ClientCallBack() {
           body: JSON.stringify(requestBody),
         });
 
-        if (response.ok) navigate('/admin/dashboard');
+        if (response.ok) navigate('/admin/auth');
         else console.error('Failed to authenticate');
       } catch (error) {
         console.error('Error handling callback:', error);
@@ -31,12 +33,15 @@ function ClientCallBack() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="card p-10 max-w-md w-full text-center animate-fade-in">
-        <div className="w-12 h-12 mx-auto rounded-full border-4 border-brand-200 border-t-brand-600 animate-spin" />
-        <h2 className="mt-5 text-xl font-bold text-ink-900">Finalizing authorization…</h2>
-        <p className="text-sm text-ink-500 mt-2">
-          Storing the access token and redirecting you to the admin dashboard.
+    <div className="authpage justify-center">
+      <div className="authcol text-center">
+        <BrandMark className="w-8 h-8 mx-auto" />
+        <div className="flex justify-center mt-8">
+          <Spinner />
+        </div>
+        <h1 className="t-h2 mt-6">Finalizing authorization…</h1>
+        <p className="t-body dim mt-2.5">
+          Storing the access token and taking you back to Auth management.
         </p>
       </div>
     </div>

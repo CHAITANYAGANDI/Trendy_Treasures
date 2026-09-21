@@ -1,14 +1,42 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaTrashAlt, FaSearch, FaUsers, FaUserShield } from 'react-icons/fa';
+import { Trash2, Search, ShieldCheck, UserPlus } from 'lucide-react';
 import { handleError, handleSuccess, logoutAdmin, apiFetch, showConfirm } from '../utils';
 import AdminShell from './AdminShell';
+import { Segmented, Spinner } from './ui/Primitives';
+import AddAdminSheet from './AddAdminSheet';
+
+const ROLE_TABS = [
+  { id: 'all', label: 'Everyone' },
+  { id: 'customer', label: 'Customers' },
+  { id: 'admin', label: 'Admins' },
+];
+
+// One definition of "is this an admin", used by both the filter and the
+// role badge.
+//
+// They used to disagree. The badge said "Shopper" for anything that was not
+// Admin, but the filter matched `role === 'user'` — and the User model's
+// enum is ['Admin', 'Customer'] with a default of 'Customer', so no account
+// has ever had the role 'user'. That tab therefore always came back empty.
+// Deriving both from this predicate means the list can only ever show what
+// the badges say, whatever role strings the model grows later.
+const isAdminUser = (user) => String((user && user.role) || '').toLowerCase() === 'admin';
+
+// Admins and customers both sign in with an email, held in the same column,
+// so the heading just names whichever audience the filter is showing.
+const IDENTITY_HEADING = {
+  all: 'Email',
+  customer: 'Customer email',
+  admin: 'Admin email',
+};
 
 function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [addOpen, setAddOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -66,7 +94,10 @@ function UserManagement() {
 
   const filtered = useMemo(() => {
     let list = users;
-    if (roleFilter !== 'all') list = list.filter((u) => (u.role || '').toLowerCase() === roleFilter);
+    if (roleFilter !== 'all') {
+      const wantAdmin = roleFilter === 'admin';
+      list = list.filter((u) => isAdminUser(u) === wantAdmin);
+    }
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       list = list.filter(
@@ -78,129 +109,98 @@ function UserManagement() {
     return list;
   }, [users, query, roleFilter]);
 
-  const adminCount = users.filter((u) => (u.role || '').toLowerCase() === 'admin').length;
-  const userCount = users.length - adminCount;
-
   return (
     <AdminShell
       title="User management"
-      subtitle="View accounts on the platform and remove admin operators."
+      subtitle="Accounts and admin access."
+      actions={
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="btn btn-blue btn-sm"
+        >
+          <UserPlus size={15} aria-hidden="true" />
+          Add admin
+        </button>
+      }
     >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="card p-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-brand-100 text-brand-700 flex items-center justify-center">
-            <FaUsers />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-ink-500 font-semibold">Total accounts</p>
-            <p className="text-xl font-bold text-ink-900">{users.length}</p>
-          </div>
-        </div>
-        <div className="card p-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-            <FaUsers />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-ink-500 font-semibold">Shoppers</p>
-            <p className="text-xl font-bold text-ink-900">{userCount}</p>
-          </div>
-        </div>
-        <div className="card p-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center">
-            <FaUserShield />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider text-ink-500 font-semibold">Admins</p>
-            <p className="text-xl font-bold text-ink-900">{adminCount}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-ink-100 flex flex-col sm:flex-row gap-3 sm:items-center">
-          <div className="relative flex-1 max-w-sm">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400 text-sm" />
+      <div className="max-w-[1220px]">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <label className="search w-full sm:w-[320px]">
+            <Search size={15} aria-hidden="true" className="shrink-0" />
             <input
-              type="text"
+              type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by name or email…"
-              className="w-full pl-11 pr-4 py-2 rounded-full bg-white border border-ink-200 text-sm focus:outline-none focus:border-brand-400 focus:shadow-focus transition-all"
+              aria-label="Search accounts"
             />
-          </div>
-          <div className="flex gap-2 sm:ml-auto">
-            {[
-              { id: 'all', label: 'Everyone' },
-              { id: 'user', label: 'Shoppers' },
-              { id: 'admin', label: 'Admins' },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => setRoleFilter(opt.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all
-                  ${roleFilter === opt.id
-                    ? 'bg-brand-gradient text-white shadow-md shadow-brand-500/30'
-                    : 'bg-white border border-ink-200/80 text-ink-700 hover:border-brand-300'}`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          </label>
+          <div className="sm:ml-auto">
+            <Segmented
+              options={ROLE_TABS}
+              value={roleFilter}
+              onChange={setRoleFilter}
+              label="Filter by role"
+            />
           </div>
         </div>
 
         {loading ? (
-          <div className="p-10 text-center text-sm text-ink-500">Loading users…</div>
+          <div className="py-16 flex flex-col items-center gap-3" role="status">
+            <Spinner size={24} />
+            <p className="t-ui dim">Loading users…</p>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center text-sm text-ink-500">
-            No users match your search.
+          <div className="py-16 text-center border-t border-hairline">
+            <p className="t-ui dim">No users match your search.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="tablewrap">
+            <table className="table">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-ink-500 font-semibold border-b border-ink-100 bg-ink-50/50">
-                  <th className="px-5 py-3.5 w-10">#</th>
-                  <th className="px-5 py-3.5">User</th>
-                  <th className="px-5 py-3.5">Email</th>
-                  <th className="px-5 py-3.5">Role</th>
-                  <th className="px-5 py-3.5 text-right">Action</th>
+                <tr>
+                  <th className="idx">#</th>
+                  <th>Name of the account holder</th>
+                  <th>{IDENTITY_HEADING[roleFilter]}</th>
+                  <th>Role</th>
+                  <th className="right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((user, index) => {
-                  const isAdmin = (user.role || '').toLowerCase() === 'admin';
+                  const isAdmin = isAdminUser(user);
                   const initial = user.name?.[0]?.toUpperCase() || '?';
                   return (
-                    <tr key={user.email} className="border-b border-ink-100 last:border-0 hover:bg-ink-50/40 transition-colors">
-                      <td className="px-5 py-3 text-ink-500 text-xs">{index + 1}</td>
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className={`w-9 h-9 rounded-full ${isAdmin ? 'bg-gradient-to-br from-rose-500 to-pink-500' : 'bg-brand-gradient'} text-white text-sm font-bold flex items-center justify-center shadow-md`}>
+                    <tr key={user.email}>
+                      <td className="idx">{index + 1}</td>
+                      <td>
+                        <span className="flex items-center gap-3">
+                          <span className={`avatar ${isAdmin ? 'avatar-admin' : ''}`} aria-hidden="true">
                             {initial}
                           </span>
-                          <span className="font-semibold text-ink-900">{user.name}</span>
-                        </div>
+                          <span className="font-medium">{user.name}</span>
+                        </span>
                       </td>
-                      <td className="px-5 py-3 text-ink-600">{user.email}</td>
-                      <td className="px-5 py-3">
-                        {isAdmin ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-100">
-                            <FaUserShield /> Admin
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-100">
-                            Shopper
-                          </span>
-                        )}
+                      <td className="dim">{user.email}</td>
+                      <td>
+                        <span className={`rolechip ${isAdmin ? 'rolechip-admin' : ''}`}>
+                          {isAdmin && <ShieldCheck size={12} aria-hidden="true" />}
+                          {isAdmin ? 'Admin' : 'Customer'}
+                        </span>
                       </td>
-                      <td className="px-5 py-3 text-right">
+                      <td className="right">
+                        {/* Delete exists on admin rows only — deleteUserById
+                            rejects anything else server-side. */}
                         {isAdmin && (
                           <button
+                            type="button"
                             onClick={() => deleteAdmin(user.email)}
-                            className="p-2 rounded-full text-ink-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                            className="icon-btn icon-btn-danger"
                             title="Delete admin"
+                            aria-label={`Delete admin ${user.name || user.email}`}
                           >
-                            <FaTrashAlt className="text-sm" />
+                            <Trash2 size={16} aria-hidden="true" />
                           </button>
                         )}
                       </td>
@@ -212,6 +212,14 @@ function UserManagement() {
           </div>
         )}
       </div>
+
+      {/* Creating an admin is an action on this list, so it happens over
+          the list and refreshes it in place. */}
+      <AddAdminSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={fetchUsers}
+      />
     </AdminShell>
   );
 }

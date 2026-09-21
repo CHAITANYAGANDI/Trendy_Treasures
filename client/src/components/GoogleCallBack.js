@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, fetchCurrentUser } from '../utils';
+import BrandMark from './BrandMark';
+import { Spinner } from './ui/Primitives';
 
 function GoogleAuthCallback() {
   const navigate = useNavigate();
@@ -37,11 +39,14 @@ function GoogleAuthCallback() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="card p-10 max-w-md w-full text-center animate-fade-in">
-        <div className="w-12 h-12 mx-auto rounded-full border-4 border-brand-200 border-t-brand-600 animate-spin" />
-        <h2 className="mt-5 text-xl font-bold text-ink-900">Signing you in…</h2>
-        <p className="text-sm text-ink-500 mt-2">
+    <div className="authpage justify-center">
+      <div className="authcol text-center">
+        <BrandMark className="w-8 h-8 mx-auto" />
+        <div className="flex justify-center mt-8">
+          <Spinner />
+        </div>
+        <h1 className="t-h2 mt-6">Signing you in…</h1>
+        <p className="t-body dim mt-2.5">
           Just a moment while we finish authenticating with Google.
         </p>
       </div>

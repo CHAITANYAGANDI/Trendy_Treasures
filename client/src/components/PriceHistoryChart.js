@@ -1,16 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchPriceHistory } from '../utils';
-
-// Tailwind has the brand color palette; we just need raw hex values for SVG.
-const LINE = '#4f46e5';      // brand-600
-const AREA = '#6366f1';      // brand-500
-const AXIS = '#94a3b8';      // ink-400-ish
-const GRID = '#e2e8f0';      // ink-100
+import { Segmented, Spinner } from './ui/Primitives';
 
 const RANGE_OPTIONS = [
-    { label: '7d', days: 7 },
-    { label: '30d', days: 30 },
-    { label: '90d', days: 90 }
+    { id: 7, label: '7d' },
+    { id: 30, label: '30d' },
+    { id: 90, label: '90d' }
 ];
 
 const fmtPrice = (n) => `$${Number(n).toFixed(2)}`;
@@ -22,10 +17,27 @@ const fmtDate = (d) => {
 // Renders an SVG line chart from a list of { price, snapshotted_at } points.
 // Inline SVG is enough at this scale (≤365 points) and avoids pulling in
 // Recharts/Chart.js (~80kB gzipped each) into the production bundle.
+//
+// The viewBox is measured from the container rather than fixed, because a
+// fixed viewBox stretched inside a fluid column distorts the stroke weight
+// and the axis type along with it.
 function PriceHistoryChart({ provider, productId, currentPrice }) {
     const [days, setDays] = useState(30);
     const [snapshots, setSnapshots] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [width, setWidth] = useState(880);
+    const frameRef = useRef(null);
+
+    useLayoutEffect(() => {
+        const node = frameRef.current;
+        if (!node) return undefined;
+        const measure = () => setWidth(Math.max(280, node.clientWidth));
+        measure();
+        if (typeof ResizeObserver === 'undefined') return undefined;
+        const ro = new ResizeObserver(measure);
+        ro.observe(node);
+        return () => ro.disconnect();
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -50,11 +62,12 @@ function PriceHistoryChart({ provider, productId, currentPrice }) {
         return { min, max, first, last, delta, deltaPct };
     }, [snapshots]);
 
-    // Pre-compute SVG geometry. ViewBox is 600x180 with 40/30/20/20 padding.
+    // Geometry in measured pixels, so one SVG unit is always one CSS pixel.
     const geometry = useMemo(() => {
         if (!snapshots || snapshots.length === 0) return null;
-        const W = 600, H = 180;
-        const P = { t: 20, r: 20, b: 30, l: 40 };
+        const W = width;
+        const H = width < 560 ? 190 : width < 900 ? 250 : 300;
+        const P = { t: 18, r: 14, b: 30, l: 54 };
         const innerW = W - P.l - P.r;
         const innerH = H - P.t - P.b;
 
@@ -82,134 +95,139 @@ function PriceHistoryChart({ provider, productId, currentPrice }) {
         const yTicks = [minY, (minY + maxY) / 2, maxY].map((v) => ({ value: v, y: y(v) }));
 
         return { W, H, P, innerW, innerH, points, linePath, areaPath, yTicks, firstT, lastT };
-    }, [snapshots]);
+    }, [snapshots, width]);
+
+    const fell = stats && stats.delta < 0;
+    const rose = stats && stats.delta > 0;
 
     return (
-        <section className="rounded-2xl border border-ink-100 bg-white/90 p-5">
-            <header className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <section aria-labelledby="price-history-title">
+            <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h2 className="text-lg font-bold text-ink-900">Price history</h2>
-                    <p className="text-xs text-ink-500 mt-0.5">
+                    <h2 id="price-history-title" className="t-h2">Price history</h2>
+                    <p className="t-ui dim mt-1">
                         Snapshots are taken when shoppers view this product.
                     </p>
                 </div>
-                <div className="inline-flex rounded-full bg-ink-100/80 p-1">
-                    {RANGE_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.label}
-                            type="button"
-                            onClick={() => setDays(opt.days)}
-                            className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-                                days === opt.days
-                                    ? 'bg-white text-brand-700 shadow-sm'
-                                    : 'text-ink-500 hover:text-ink-700'
-                            }`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-            </header>
+                <Segmented
+                    options={RANGE_OPTIONS}
+                    value={days}
+                    onChange={setDays}
+                    label="Price history range"
+                />
+            </div>
 
-            {loading ? (
-                <div className="h-[180px] flex items-center justify-center text-sm text-ink-400 animate-pulse">
-                    Loading price history…
-                </div>
-            ) : !snapshots || snapshots.length === 0 ? (
-                <div className="h-[180px] flex flex-col items-center justify-center text-center gap-2 text-sm text-ink-500">
-                    <p className="font-medium text-ink-700">No price history yet.</p>
-                    <p className="text-xs">
-                        We'll start tracking the price{currentPrice ? ` (${fmtPrice(currentPrice)})` : ''} from this view onward.
-                    </p>
-                </div>
-            ) : (
-                <>
-                    {stats && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                            <Stat label="Current" value={fmtPrice(stats.last)} />
-                            <Stat label={`${days}d low`} value={fmtPrice(stats.min)} />
-                            <Stat label={`${days}d high`} value={fmtPrice(stats.max)} />
-                            <Stat
-                                label="Change"
-                                value={`${stats.delta >= 0 ? '+' : ''}${fmtPrice(stats.delta)} (${stats.deltaPct.toFixed(1)}%)`}
-                                tone={stats.delta < 0 ? 'good' : stats.delta > 0 ? 'bad' : 'neutral'}
-                            />
-                        </div>
-                    )}
+            <div ref={frameRef} className="mt-7">
+                {loading ? (
+                    <div className="h-[190px] md:h-[250px] flex flex-col items-center justify-center gap-3">
+                        <Spinner size={24} />
+                        <p className="t-ui dim">Loading price history…</p>
+                    </div>
+                ) : !snapshots || snapshots.length === 0 ? (
+                    <div className="h-[190px] md:h-[250px] flex flex-col items-center justify-center text-center gap-2 border-t border-hairline">
+                        <p className="t-h4">No price history yet.</p>
+                        <p className="t-ui dim measure">
+                            We'll start tracking the price{currentPrice ? ` (${fmtPrice(currentPrice)})` : ''} from this view onward.
+                        </p>
+                    </div>
+                ) : (
+                    <>
+                        {geometry && (
+                            <svg
+                                viewBox={`0 0 ${geometry.W} ${geometry.H}`}
+                                width={geometry.W}
+                                height={geometry.H}
+                                className="chart-svg"
+                                role="img"
+                                aria-label={`Price history line chart spanning ${days} days`}
+                            >
+                                <defs>
+                                    <linearGradient id="priceArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#0071e3" stopOpacity="0.14" />
+                                        <stop offset="100%" stopColor="#0071e3" stopOpacity="0" />
+                                    </linearGradient>
+                                </defs>
 
-                    {geometry && (
-                        <svg
-                            viewBox={`0 0 ${geometry.W} ${geometry.H}`}
-                            className="w-full h-auto"
-                            role="img"
-                            aria-label={`Price history line chart spanning ${days} days`}
-                        >
-                            <defs>
-                                <linearGradient id="priceArea" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={AREA} stopOpacity="0.25" />
-                                    <stop offset="100%" stopColor={AREA} stopOpacity="0" />
-                                </linearGradient>
-                            </defs>
+                                {/* Gridlines + Y labels */}
+                                {geometry.yTicks.map((tick, i) => (
+                                    <g key={i}>
+                                        <line
+                                            className="chart-grid"
+                                            x1={geometry.P.l}
+                                            x2={geometry.W - geometry.P.r}
+                                            y1={tick.y}
+                                            y2={tick.y}
+                                        />
+                                        <text
+                                            className="chart-axis"
+                                            x={geometry.P.l - 10}
+                                            y={tick.y + 4}
+                                            textAnchor="end"
+                                        >
+                                            {fmtPrice(tick.value)}
+                                        </text>
+                                    </g>
+                                ))}
 
-                            {/* Gridlines + Y labels */}
-                            {geometry.yTicks.map((tick, i) => (
-                                <g key={i}>
-                                    <line
-                                        x1={geometry.P.l}
-                                        x2={geometry.W - geometry.P.r}
-                                        y1={tick.y}
-                                        y2={tick.y}
-                                        stroke={GRID}
-                                        strokeDasharray="3 4"
-                                    />
-                                    <text
-                                        x={geometry.P.l - 6}
-                                        y={tick.y + 3}
-                                        textAnchor="end"
-                                        fontSize="10"
-                                        fill={AXIS}
+                                {/* X axis labels (first + last snapshot date) */}
+                                <text className="chart-axis" x={geometry.P.l} y={geometry.H - 8}>
+                                    {fmtDate(geometry.firstT)}
+                                </text>
+                                <text
+                                    className="chart-axis"
+                                    x={geometry.W - geometry.P.r}
+                                    y={geometry.H - 8}
+                                    textAnchor="end"
+                                >
+                                    {fmtDate(geometry.lastT)}
+                                </text>
+
+                                <path d={geometry.areaPath} fill="url(#priceArea)" />
+                                <path
+                                    key={`${days}-${geometry.W}`}
+                                    d={geometry.linePath}
+                                    className="chart-line chart-draw"
+                                />
+
+                                {/* Endpoint dot for emphasis on "current" price */}
+                                {(() => {
+                                    const last = geometry.points[geometry.points.length - 1];
+                                    return <circle className="chart-dot" cx={last.x} cy={last.y} r="4.5" />;
+                                })()}
+                            </svg>
+                        )}
+
+                        {stats && (
+                            <div className="figures mt-6">
+                                <div>
+                                    <p className="figure-l">Current</p>
+                                    <p className="figure-v">{fmtPrice(stats.last)}</p>
+                                </div>
+                                <div>
+                                    <p className="figure-l">{days}d low</p>
+                                    <p className="figure-v">{fmtPrice(stats.min)}</p>
+                                </div>
+                                <div>
+                                    <p className="figure-l">{days}d high</p>
+                                    <p className="figure-v">{fmtPrice(stats.max)}</p>
+                                </div>
+                                <div>
+                                    <p className="figure-l">Change</p>
+                                    <p
+                                        className={`figure-v ${fell ? 'figure-good' : rose ? 'figure-bad' : ''}`}
                                     >
-                                        {fmtPrice(tick.value)}
-                                    </text>
-                                </g>
-                            ))}
-
-                            {/* X axis labels (first + last snapshot date) */}
-                            <text x={geometry.P.l} y={geometry.H - 8} fontSize="10" fill={AXIS}>
-                                {fmtDate(geometry.firstT)}
-                            </text>
-                            <text x={geometry.W - geometry.P.r} y={geometry.H - 8} textAnchor="end" fontSize="10" fill={AXIS}>
-                                {fmtDate(geometry.lastT)}
-                            </text>
-
-                            <path d={geometry.areaPath} fill="url(#priceArea)" />
-                            <path d={geometry.linePath} fill="none" stroke={LINE} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-
-                            {/* Endpoint dot for emphasis on "current" price */}
-                            {(() => {
-                                const last = geometry.points[geometry.points.length - 1];
-                                return (
-                                    <circle cx={last.x} cy={last.y} r="3.5" fill={LINE} stroke="white" strokeWidth="1.5" />
-                                );
-                            })()}
-                        </svg>
-                    )}
-                </>
-            )}
+                                        {stats.delta >= 0 ? '+' : ''}{fmtPrice(stats.delta)}{' '}
+                                        <span className="text-ui font-normal">
+                                            ({stats.deltaPct.toFixed(1)}%)
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
         </section>
-    );
-}
-
-function Stat({ label, value, tone = 'neutral' }) {
-    const toneClass =
-        tone === 'good' ? 'text-emerald-700' :
-        tone === 'bad' ? 'text-red-600' :
-        'text-ink-900';
-    return (
-        <div className="rounded-xl border border-ink-100 bg-white px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wider text-ink-500 font-semibold">{label}</p>
-            <p className={`text-sm font-bold mt-0.5 ${toneClass}`}>{value}</p>
-        </div>
     );
 }
 

@@ -1,13 +1,35 @@
-import React, { useEffect, useState } from 'react';
-import { FaRobot } from 'react-icons/fa';
+import React, { useEffect, useRef, useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { fetchPriceAdvice, apiErrorMessage } from '../utils';
 
-// Compact "buy now or wait?" tile that sits next to the price history
+// 1st / 2nd / 3rd / 4th. The value itself is unchanged — this only picks
+// the suffix, so a 21st-percentile price no longer reads "21th".
+const ordinal = (n) => {
+    const value = Number(n);
+    if (!Number.isFinite(value)) return `${n}th`;
+    const mod100 = Math.abs(value) % 100;
+    if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+    const mod10 = Math.abs(value) % 10;
+    if (mod10 === 1) return `${value}st`;
+    if (mod10 === 2) return `${value}nd`;
+    if (mod10 === 3) return `${value}rd`;
+    return `${value}th`;
+};
+
+// Compact "buy now or wait?" panel that sits beneath the price history
 // chart. Reads the same price_snapshots data the chart does, runs it
-// through OpenAI for a 1–2 sentence recommendation. Falls back to a
-// quiet disabled state if the server returns 503 (no OPENAI_API_KEY).
-function PriceAdvisorWidget({ provider, productId }) {
+// through OpenAI for a 1–2 sentence recommendation. Renders nothing at all
+// if the server returns 503 (no OPENAI_API_KEY).
+//
+// The two-pixel luminous rule along the top marks generated text. It
+// appears here and on the grounded Q&A, and nowhere else in the product.
+function PriceAdvisorWidget({ provider, productId, bare = false, onUnavailable }) {
     const [state, setState] = useState({ loading: true });
+
+    // Held in a ref so an inline callback from the parent cannot retrigger
+    // the fetch. The effect still depends only on the product it is about.
+    const onUnavailableRef = useRef(onUnavailable);
+    onUnavailableRef.current = onUnavailable;
 
     useEffect(() => {
         let cancelled = false;
@@ -21,6 +43,9 @@ function PriceAdvisorWidget({ provider, productId }) {
                 // (timeout, OpenAI upstream error) fall through to the
                 // error branch so they're visible.
                 setState({ loading: false, disabled: true });
+                // Tell the page, so it doesn't offer a way in to a surface
+                // that has nothing to show.
+                onUnavailableRef.current?.();
             } else {
                 // Was `res.message || 'Could not load advice.'`, but a
                 // throttled or edge-rejected request has no JSON body at all,
@@ -41,37 +66,43 @@ function PriceAdvisorWidget({ provider, productId }) {
 
     if (state.disabled) return null;
 
+    // `bare` drops the bordered card and its luminous rule, for when the
+    // surface around it already carries both.
     return (
-        <section className="rounded-2xl border border-brand-200/60 bg-gradient-to-br from-brand-50/80 via-white to-white p-5">
-            <header className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-full bg-brand-gradient text-white flex items-center justify-center text-sm shadow-sm shadow-brand-500/30">
-                    <FaRobot />
-                </div>
+        <section className={bare ? '' : 'ai'}>
+            <header className="flex items-center gap-2.5">
+                <span className="ai-glyph">
+                    <Sparkles size={15} aria-hidden="true" />
+                </span>
                 <div>
-                    <h3 className="text-sm font-bold text-ink-900 leading-tight">AI price advisor</h3>
-                    <p className="text-[11px] text-ink-500">Based on the last 30 days of snapshots</p>
+                    <h3 className="ai-title">AI price advisor</h3>
+                    <p className="ai-sub">Based on the last 30 days of snapshots</p>
                 </div>
             </header>
 
-            {state.loading ? (
-                <p className="text-sm text-ink-500 animate-pulse">Analyzing price history…</p>
-            ) : state.error ? (
-                <p className="text-sm text-ink-500">{state.error}</p>
-            ) : (
-                <>
-                    <p className="text-sm text-ink-800 leading-relaxed">{state.advice}</p>
-                    {state.stats && (
-                        <p className="mt-3 text-[11px] text-ink-500">
-                            Current is at the <span className="font-semibold text-ink-700">{state.stats.percentile}th percentile</span>
-                            {' '}of the 30d range
-                            {' · '}
-                            <span className="font-semibold text-ink-700">
-                                {state.stats.trend30dPct >= 0 ? '+' : ''}{state.stats.trend30dPct}%
-                            </span>{' '}in 30d
-                        </p>
-                    )}
-                </>
-            )}
+            <div className="mt-5">
+                {state.loading ? (
+                    <p className="ai-shimmer">Analyzing price history…</p>
+                ) : state.error ? (
+                    <p className="t-ui dim">{state.error}</p>
+                ) : (
+                    <>
+                        <p className="ai-verdict">{state.advice}</p>
+                        {state.stats && (
+                            <p className="ai-stat mt-4">
+                                Current is at the{' '}
+                                <b>{ordinal(state.stats.percentile)} percentile</b> of the 30d
+                                range {' · '}
+                                <b>
+                                    {state.stats.trend30dPct >= 0 ? '+' : ''}
+                                    {state.stats.trend30dPct}%
+                                </b>{' '}
+                                in 30d
+                            </p>
+                        )}
+                    </>
+                )}
+            </div>
         </section>
     );
 }

@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { FaArrowRight, FaGoogle } from 'react-icons/fa';
+import { Eye, EyeOff } from 'lucide-react';
 import { handleError, handleSuccess, API_BASE, apiFetch, googleErrorMessage, readApiError } from '../utils';
 import AuthLayout from './AuthLayout';
 import FormErrorBanner from './FormErrorBanner';
+import { Field } from './ui/Primitives';
+import GoogleGlyph from './ui/GoogleGlyph';
 
 function Signin() {
     const [loginInfo, setLoginInfo] = useState({ email: '', password: '' });
     const [submitting, setSubmitting] = useState(false);
     const [errorBanner, setErrorBanner] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -69,75 +72,67 @@ function Signin() {
 
     return (
         <AuthLayout
-            title="Welcome back"
-            subtitle="Sign in to access your saved cart, price alerts, and tracked products."
-            panelTitle="Your prices, tracked. Your cart, saved."
-            panelSubtitle="Sign in to see your price alerts, watched products, and saved items right where you left them — across every store."
+            title="Sign in"
+            subtitle="Your saved cart, price alerts and tracked products, wherever you are."
             footer={
                 <>
                     Don't have an account?{' '}
-                    <Link to="/signup" className="font-semibold text-brand-700 hover:underline">
-                        Create one
-                    </Link>
+                    <Link to="/signup" className="link font-medium">Create one</Link>
                 </>
             }
         >
             {errorBanner && (
-                <div className="mb-4">
+                <div className="mb-5">
                     <FormErrorBanner message={errorBanner} />
                 </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-4">
-                <div>
-                    <label htmlFor="email" className="field-label">Email</label>
-                    <input
-                        id="email"
-                        name="email"
-                        type="email"
-                        autoFocus
-                        autoComplete="email"
-                        placeholder="you@example.com"
-                        value={loginInfo.email}
-                        onChange={handleChange}
-                        className="field-input"
-                    />
-                </div>
-                <div>
-                    <div className="flex items-center justify-between mb-2">
-                        <label htmlFor="password" className="field-label !mb-0">Password</label>
-                        <Link to="/forgotpassword" className="text-xs font-semibold text-brand-700 hover:underline">
-                            Forgot password?
-                        </Link>
-                    </div>
-                    <input
-                        id="password"
-                        name="password"
-                        type="password"
-                        autoComplete="current-password"
-                        placeholder="••••••••"
-                        value={loginInfo.password}
-                        onChange={handleChange}
-                        className="field-input"
-                    />
-                </div>
+            <form onSubmit={handleLogin} className="flex flex-col gap-3">
+                <Field
+                    id="email"
+                    name="email"
+                    type="email"
+                    label="Email"
+                    value={loginInfo.email}
+                    onChange={handleChange}
+                    autoFocus
+                    autoComplete="email"
+                    spellCheck="false"
+                />
+                <Field
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    label="Password"
+                    value={loginInfo.password}
+                    onChange={handleChange}
+                    autoComplete="current-password"
+                    trailing={
+                        <button
+                            type="button"
+                            className="field-reveal"
+                            onClick={() => setShowPassword((v) => !v)}
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                            {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                    }
+                />
 
-                <button type="submit" disabled={submitting} className="btn-primary w-full !py-3.5">
-                    {submitting ? 'Signing in…' : <>Sign in <FaArrowRight className="text-xs" /></>}
+                <p className="text-right">
+                    <Link to="/forgotpassword" className="link t-ui">Forgot password?</Link>
+                </p>
+
+                <button type="submit" disabled={submitting} className="btn btn-blue btn-lg btn-full mt-2">
+                    {submitting ? 'Signing in…' : 'Sign in'}
                 </button>
             </form>
 
-            <div className="flex items-center gap-3 my-6">
-                <div className="flex-1 h-px bg-ink-200" />
-                <span className="text-xs text-ink-400 font-medium uppercase tracking-wider">
-                    or
-                </span>
-                <div className="flex-1 h-px bg-ink-200" />
-            </div>
+            <div className="auth-divider my-6">or</div>
 
             <form action={`${API_BASE}/auth/google`} method="GET">
-                <button type="submit" className="btn-secondary w-full !py-3.5">
-                    <FaGoogle className="text-brand-600" /> Continue with Google
+                <button type="submit" className="btn btn-quiet btn-lg btn-full">
+                    <GoogleGlyph /> Continue with Google
                 </button>
             </form>
         </AuthLayout>

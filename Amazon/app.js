@@ -162,9 +162,14 @@ app.get('/confirmation', (req, res) => {
 // stays server-side. Returned as JS so the checkout page can `<script src>`
 // it before the main checkout.js runs.
 app.get('/config.js', (req, res) => {
+    const publicGatewayUrl =
+        process.env.TT_GATEWAY_PUBLIC_URL ||
+        process.env.TT_GATEWAY_URL ||
+        '';
+
     res.type('application/javascript').send(
         `window.STRIPE_PK = ${JSON.stringify(process.env.STRIPE_PUBLISHABLE_KEY || '')};\n` +
-        `window.TT_GATEWAY_URL = ${JSON.stringify(process.env.TT_GATEWAY_URL || '')};\n` +
+        `window.TT_GATEWAY_URL = ${JSON.stringify(publicGatewayUrl)};\n` +
         `window.TRENDY_TREASURES_URL = ${JSON.stringify(process.env.TRENDY_TREASURES_URL || '')};`
     );
 });

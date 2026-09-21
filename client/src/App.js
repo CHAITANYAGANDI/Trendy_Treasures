@@ -11,11 +11,8 @@ import VerifyOtp from './components/VerifyOtp';
 import ResetPassword from './components/ResetPassword';
 import VerifySignupOtp from './components/VerifySignupOtp';
 import AdminLogin from "./components/AdminLogin";
-import AdminRegistration from "./components/AdminRegistration";
-import AdminDashboard from "./components/AdminDashboard";
 import AuthManagement from "./components/AuthManagement";
-import AuthRequest from "./components/AuthRequest";
-import ProtectedRoutes from "./components/ProtectedRoutes";
+import AdminGuide from "./components/AdminGuide";
 import ClientCallBack from "./components/ClientCallBack";
 import ProductDetails from "./components/ProductDetails";
 import Cart from './components/Cart';
@@ -53,14 +50,28 @@ function App() {
                 <Route path="/resetpassword" element={<ResetPassword />} />
 
 
-                <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+                <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
                 <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin/register" element={<RequireAdmin><AdminRegistration /></RequireAdmin>} />
-                <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
-                <Route path="/admin/auth" element={<RequireAdmin><AuthManagement /></RequireAdmin>} />
-                <Route path="/admin/auth/request" element={<RequireAdmin><AuthRequest /></RequireAdmin>} />
-                <Route path="/admin/auth/protected" element={<RequireAdmin><ProtectedRoutes /></RequireAdmin>} />
+
+                {/* Admin recovery reuses the storefront screens in their dark
+                    appearance and hits the same /recovery/* endpoints — those
+                    look accounts up by email with no role filter, and admins
+                    live in the same collection. */}
+                <Route path="/admin/forgot" element={<ForgotPassword admin />} />
+                <Route path="/admin/verifyotp" element={<VerifyOtp admin />} />
+                <Route path="/admin/resetpassword" element={<ResetPassword admin />} />
                 <Route path="/admin/users" element={<RequireAdmin><UserManagement /></RequireAdmin>} />
+                <Route path="/admin/auth" element={<RequireAdmin><AuthManagement /></RequireAdmin>} />
+                <Route path="/admin/guide" element={<RequireAdmin><AdminGuide /></RequireAdmin>} />
+
+                {/* The dashboard is gone, adding an admin is a dialog on the
+                    user list, and the authorized APIs are a section of auth
+                    management. The old URLs still resolve so existing links
+                    and bookmarks land somewhere sensible. */}
+                <Route path="/admin/dashboard" element={<Navigate to="/admin/users" replace />} />
+                <Route path="/admin/register" element={<Navigate to="/admin/users" replace />} />
+                <Route path="/admin/auth/protected" element={<Navigate to="/admin/auth" replace />} />
+                <Route path="/admin/auth/request" element={<Navigate to="/admin/auth" replace />} />
                 <Route path="/admin/client/callback" element={<RequireAdmin><ClientCallBack /></RequireAdmin>} />
             </Routes>
 

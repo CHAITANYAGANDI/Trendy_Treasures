@@ -67,6 +67,40 @@ const ensureAuthorized = async (req, res, next) => {
     }
 };
 
+// Optional authentication: attach req.user when a valid session is present,
+// and carry on quietly when it is not.
+//
+// POST /checkout/intent must stay reachable without a session — the referral
+// code is the capability, and the endpoint is documented as unauthenticated.
+// But when a signed-in buyer checks out, the intent has to record who they
+// are, because completeIntent() clears the ordered lines out of their cart
+// by matching on that userId. With no user attached the intent was stored
+// with userId: null, the clear was skipped, and items stayed in the cart
+// after the provider reported the order placed.
+const attachUserIfPresent = async (req, res, next) => {
+    const token = (req.cookies && req.cookies.userToken) || fromAuthHeader(req);
+    if (!token) return next();
+
+    try {
+        if (token.startsWith('ya29.')) {
+            const response = await axios.get('https://www.googleapis.com/oauth2/v3/tokeninfo', {
+                params: { access_token: token },
+            });
+            if (response.data.aud === process.env.GOOGLE_CLIENT_ID) {
+                req.user = response.data;
+            }
+        } else {
+            req.user = jwt.verify(token, process.env.JWT_SECRET);
+        }
+    } catch (error) {
+        // Expired or invalid simply means "no user" on this request. Never
+        // reject — the endpoint is valid without a session.
+        console.warn('attachUserIfPresent: ignoring token –', error.message);
+    }
+
+    return next();
+};
+
 const ensureAdminAuthorized = (req, res, next) => {
     const token = req.cookies && req.cookies.adminToken;
     if (!token) {
@@ -78,3 +112,4 @@ const ensureAdminAuthorized = (req, res, next) => {
 module.exports = ensureAuthorized;
 module.exports.ensureAuthorized = ensureAuthorized;
 module.exports.ensureAdminAuthorized = ensureAdminAuthorized;
+module.exports.attachUserIfPresent = attachUserIfPresent;

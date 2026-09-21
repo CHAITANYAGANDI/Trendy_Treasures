@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaArrowRight, FaEnvelope } from 'react-icons/fa';
 import { handleError, handleSuccess, apiFetch } from '../utils';
 import AuthLayout from './AuthLayout';
+import { Field } from './ui/Primitives';
 
-function ForgotPassword() {
+// Admins and customers both live in the users collection and the
+// /recovery/* endpoints look accounts up by email with no role filter, so
+// the admin flow is this same screen in the dark appearance — not a second
+// implementation that could drift.
+function ForgotPassword({ admin = false }) {
     const [email, setEmail] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
@@ -23,7 +27,7 @@ function ForgotPassword() {
             const result = await response.json();
             if (result.success) {
                 handleSuccess(result.message);
-                setTimeout(() => navigate('/verifyotp'), 800);
+                setTimeout(() => navigate(admin ? '/admin/verifyotp' : '/verifyotp'), 800);
             } else {
                 handleError(result.message);
             }
@@ -36,39 +40,52 @@ function ForgotPassword() {
 
     return (
         <AuthLayout
+            dark={admin}
+            eyebrow={admin ? 'Admin portal' : null}
             title="Forgot your password?"
-            subtitle="Enter the email on your account and we'll send you a 4-digit code to reset it."
-            panelTitle="We'll get you back in quickly."
-            panelSubtitle="Password recovery is fast and secure. We send you a fresh code each time and never share your email."
+            subtitle={
+                admin
+                    ? "Enter your admin email and we'll send you a 4-digit code to reset your password."
+                    : "Enter the email on your account and we'll send you a 4-digit code to reset it."
+            }
             footer={
                 <>
                     Remembered it?{' '}
-                    <Link to="/login" className="font-semibold text-brand-700 hover:underline">
+                    <Link to={admin ? '/admin/login' : '/login'} className="link font-medium">
                         Back to sign in
                     </Link>
                 </>
             }
         >
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div>
-                    <label htmlFor="email" className="field-label">Email</label>
-                    <div className="relative">
-                        <FaEnvelope className="absolute left-5 top-1/2 -translate-y-1/2 text-ink-400 text-sm" />
-                        <input
-                            id="email"
-                            type="email"
-                            placeholder="you@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            autoFocus
-                            className="field-input !pl-12"
-                        />
-                    </div>
-                </div>
-                <button type="submit" disabled={submitting} className="btn-primary w-full !py-3.5">
-                    {submitting ? 'Sending…' : <>Send code <FaArrowRight className="text-xs" /></>}
+            <form onSubmit={handleForgotPassword}>
+                <Field
+                    id="email"
+                    type="email"
+                    label={admin ? 'Admin email' : 'Email'}
+                    className={admin ? 'field-dark' : ''}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                    autoComplete="email"
+                    spellCheck="false"
+                />
+
+                <button
+                    type="submit"
+                    disabled={submitting}
+                    className={`btn btn-lg btn-full mt-5 ${
+                        admin ? '!bg-[#0a84ff] !text-white hover:!bg-[#3d9bff]' : 'btn-blue'
+                    }`}
+                >
+                    {submitting ? 'Sending…' : 'Send code'}
                 </button>
+
+                {/* Deliberate non-disclosure: the server answers the same way
+                    whether or not the address has an account. */}
+                <p className={`text-cap text-center mt-4 leading-relaxed ${admin ? 'text-[#8e8e93]' : 'dim'}`}>
+                    If an account exists for that address, the code is on its way.
+                </p>
             </form>
         </AuthLayout>
     );

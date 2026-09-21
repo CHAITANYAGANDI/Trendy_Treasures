@@ -1,9 +1,9 @@
 {
   "short_name": "TrendyTreasures",
-  "name": "TrendyTreasures — Curated finds, one cart",
+  "name": "TrendyTreasures \u00e2\u20ac\u201d Curated finds, one cart",
   "icons": [
     {
-      "src": "favicon.svg",
+      "src": "favicon.svg?v=3",
       "type": "image/svg+xml",
       "sizes": "any"
     },
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#6366f1",
+  "theme_color": "#ffffff",
   "background_color": "#ffffff"
 }

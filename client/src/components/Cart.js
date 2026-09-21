@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FaShoppingBag, FaArrowRight, FaTrashAlt, FaLock, FaInfoCircle } from 'react-icons/fa';
+import { ShoppingBag, Trash2, Lock, Info, ArrowRight, ChevronLeft } from 'lucide-react';
 import {
   handleError,
   handleSuccess,
@@ -15,15 +15,14 @@ import {
 } from '../utils';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
-import SourcePill from './SourcePill';
-import '../Cart.css';
+import SourcePill, { sellerLabel } from './SourcePill';
+import { QuantitySelect, EmptyState, Notice } from './ui/Primitives';
+import { formatPrice } from '../productMeta';
 
 const normalizeSource = (source) => {
   const value = String(source || '').trim().toLowerCase();
   return value === 'amazon' || value === 'walmart' ? value : null;
 };
-
-const sellerLabel = (source) => (source === 'amazon' ? 'Amazon' : 'Walmart');
 
 function Cart() {
   const [cartItems, setCartItems] = useState([]);
@@ -215,6 +214,78 @@ function Cart() {
   const sourcesInCart = Object.keys(itemsBySource);
   const cartCount = cartItems.reduce((a, c) => a + Number(c.productQuantity || 0), 0);
 
+  // One line, rendered inside its seller's group.
+  const renderLine = (item) => {
+    const editing =
+      updatedItems[item.productName] !== undefined &&
+      updatedItems[item.productName] !== item.productQuantity;
+
+    return (
+      <li
+        key={item.productName}
+        className="grid grid-cols-[84px_1fr] sm:grid-cols-[110px_1fr] gap-4 sm:gap-5 py-6 border-b border-hairlineSoft"
+      >
+        <div className="rounded-fld bg-haze aspect-square grid place-items-center overflow-hidden">
+          <img
+            src={item.productImageUrl}
+            alt={item.productName}
+            className="w-[82%] h-[82%] object-contain"
+          />
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="t-body font-medium clamp2">{item.productName}</h3>
+            <p className="t-h4 tnum shrink-0">
+              {formatPrice(Number(item.productPrice) * Number(item.productQuantity))}
+            </p>
+          </div>
+
+          <p className="t-cap dim mt-1 tnum">
+            {formatPrice(item.productPrice)} each
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <label htmlFor={`qty-${item.productName}`} className="t-cap dim">
+              Qty
+            </label>
+            <QuantitySelect
+              id={`qty-${item.productName}`}
+              ariaLabel={`Quantity for ${item.productName}`}
+              value={
+                updatedItems[item.productName] !== undefined
+                  ? updatedItems[item.productName]
+                  : item.productQuantity
+              }
+              onChange={(e) =>
+                handleQuantityChange(item.productName, parseInt(e.target.value))
+              }
+            />
+            {/* Update only exists once the number has actually changed. */}
+            {editing && (
+              <button
+                type="button"
+                onClick={() => handleUpdateQuantity(item.productName)}
+                className="btn btn-outline btn-sm"
+              >
+                Update
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleRemoveItem(item.productName)}
+              className="icon-btn icon-btn-danger ml-auto"
+              aria-label={`Remove ${item.productName}`}
+              title="Remove"
+            >
+              <Trash2 size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </li>
+    );
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <SiteHeader
@@ -224,217 +295,144 @@ function Cart() {
         showSearch={false}
       />
 
-      <main className="page-shell py-10 flex-1">
-        <div className="flex items-end justify-between mb-8 animate-fade-in">
-          <div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-ink-900 tracking-tight">
-              Your cart
-            </h1>
-            <p className="text-ink-500 mt-1 text-sm">
-              {cartItems.length === 0
-                ? 'No items yet — let\'s find something good.'
-                : `${cartItems.length} item${cartItems.length === 1 ? '' : 's'} from ${sourcesInCart.length} seller${sourcesInCart.length === 1 ? '' : 's'}`}
-            </p>
-          </div>
-          <Link to="/home" className="btn-ghost hidden sm:inline-flex">
-            ← Continue shopping
+      <div className="pagebar">
+        <div className="pagebar-inner">
+          <Link to="/home" className="btn btn-plain !px-0">
+            <ChevronLeft size={15} aria-hidden="true" /> Continue shopping
           </Link>
         </div>
+      </div>
+
+      <main className="shell-wide py-8 md:py-12 flex-1 w-full">
+        <header className="mb-8">
+          <h1 className="t-d3">Your cart</h1>
+          <p className="t-ui dim mt-1.5">
+            {cartItems.length === 0
+              ? 'No items yet — let\'s find something good.'
+              : `${cartItems.length} item${cartItems.length === 1 ? '' : 's'} from ${sourcesInCart.length} seller${sourcesInCart.length === 1 ? '' : 's'}`}
+          </p>
+        </header>
 
         {!currentUser && authResolved && cartItems.length > 0 && (
-          <div className="glass rounded-2xl p-4 mb-6 flex items-start gap-3 text-sm text-ink-700 animate-fade-in">
-            <FaInfoCircle className="text-brand-500 mt-0.5 shrink-0" />
-            <p>
-              Items in this cart are stored in your browser.{' '}
-              <Link to="/login" className="text-brand-700 font-semibold hover:underline">
-                Sign in
-              </Link>{' '}
-              to save them and check out.
-            </p>
-          </div>
+          <Notice icon={<Info size={17} aria-hidden="true" />} className="mb-8">
+            Items in this cart are stored in your browser.{' '}
+            <Link to="/login" className="link font-medium">Sign in</Link> to save them
+            and check out.
+          </Notice>
         )}
 
         {cartItems.length === 0 ? (
-          <div className="card p-12 text-center animate-fade-in max-w-xl mx-auto">
-            <div className="w-16 h-16 mx-auto rounded-full bg-brand-100 text-brand-600 flex items-center justify-center">
-              <FaShoppingBag className="text-2xl" />
-            </div>
-            <h3 className="mt-5 text-xl font-bold text-ink-900">Your cart is empty</h3>
-            <p className="text-ink-500 mt-2">
-              Browse our curated collection and pick out something you love.
-            </p>
-            <button onClick={() => navigate('/home')} className="btn-primary mt-6">
-              Start shopping <FaArrowRight />
-            </button>
-          </div>
+          <EmptyState
+            glyph={<ShoppingBag size={38} className="glyph" aria-hidden="true" />}
+            title="Your cart is empty"
+            action={
+              <button type="button" onClick={() => navigate('/home')} className="btn btn-blue btn-lg">
+                Start shopping <ArrowRight size={16} aria-hidden="true" />
+              </button>
+            }
+          >
+            Browse Amazon and Walmart side by side and pick out something you love.
+          </EmptyState>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
-            {/* Line items */}
-            <div className="lg:col-span-8 space-y-4">
-              {cartItems.map((item, index) => {
-                const src = deriveSource(item);
-                const editing = updatedItems[item.productName] !== undefined
-                  && updatedItems[item.productName] !== item.productQuantity;
-                return (
-                  <div
-                    key={index}
-                    className="card p-4 sm:p-5 flex flex-col sm:flex-row gap-4"
-                  >
-                    <div className="w-full sm:w-32 sm:h-32 h-40 shrink-0 rounded-2xl overflow-hidden bg-ink-50 flex items-center justify-center">
-                      <img
-                        src={item.productImageUrl}
-                        alt={item.productName}
-                        className="w-full h-full object-contain p-2"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-semibold text-ink-900 line-clamp-2">
-                          {item.productName}
-                        </h3>
-                        <button
-                          onClick={() => handleRemoveItem(item.productName)}
-                          className="p-2 text-ink-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors shrink-0"
-                          aria-label="Remove item"
-                        >
-                          <FaTrashAlt className="text-sm" />
-                        </button>
-                      </div>
-
-                      <SourcePill provider={src} prefix="Sold on" className="mt-2" />
-
-                      <div className="mt-3 flex flex-wrap items-center gap-3 justify-between">
-                        <div className="flex items-center gap-2">
-                          <label className="text-xs font-medium text-ink-500">Qty</label>
-                          <select
-                            value={
-                              updatedItems[item.productName] !== undefined
-                                ? updatedItems[item.productName]
-                                : item.productQuantity
-                            }
-                            onChange={(e) =>
-                              handleQuantityChange(item.productName, parseInt(e.target.value))
-                            }
-                            className="px-3 py-1.5 rounded-full bg-white border border-ink-200 text-sm font-semibold text-ink-800 focus:outline-none focus:border-brand-400 focus:shadow-focus cursor-pointer"
-                          >
-                            {[...Array(10).keys()].map((num) => (
-                              <option key={num + 1} value={num + 1}>{num + 1}</option>
-                            ))}
-                          </select>
-                          {editing && (
-                            <button
-                              onClick={() => handleUpdateQuantity(item.productName)}
-                              className="px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 text-xs font-semibold hover:bg-brand-100 transition-colors"
-                            >
-                              Update
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-xl font-bold text-ink-900">
-                          ${(Number(item.productPrice) * Number(item.productQuantity)).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
+          <div className="grid gap-10 lg:gap-14 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
+            {/* Lines, grouped by the seller who actually holds the item. */}
+            <div>
+              {sourcesInCart.map((src) => (
+                <section key={src} className="mb-10 last:mb-0">
+                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-hairline">
+                    <SourcePill provider={src} prefix="Sold on" />
+                    <p className="t-cap dim tnum">
+                      {itemsBySource[src].items.length} item
+                      {itemsBySource[src].items.length === 1 ? '' : 's'} ·{' '}
+                      {formatPrice(itemsBySource[src].subtotal)}
+                    </p>
                   </div>
-                );
-              })}
+                  <ul>{itemsBySource[src].items.map(renderLine)}</ul>
+                </section>
+              ))}
             </div>
 
             {/* Summary */}
-            <aside className="lg:col-span-4">
-              <div className="lg:sticky lg:top-28 space-y-4">
-                <div className="card p-6">
-                  <h3 className="text-lg font-bold text-ink-900">Order summary</h3>
+            <aside className="lg:sticky lg:top-28">
+              <h2 className="t-h3">Order summary</h2>
 
-                  <div className="mt-4 space-y-3">
-                    {sourcesInCart.map((src) => {
-                      const group = itemsBySource[src];
-                      const label = sellerLabel(src);
-                      return (
-                        <div key={src} className="flex justify-between text-sm">
-                          <span className="text-ink-600">
-                            {label} · {group.items.length} item{group.items.length === 1 ? '' : 's'}
-                          </span>
-                          <span className="text-ink-900 font-semibold">
-                            ${group.subtotal.toFixed(2)}
+              <div className="mt-5 border-t border-hairline">
+                {sourcesInCart.map((src) => {
+                  const group = itemsBySource[src];
+                  return (
+                    <div
+                      key={src}
+                      className="flex justify-between gap-4 py-3 border-b border-hairlineSoft t-ui"
+                    >
+                      <span className="dim">
+                        {sellerLabel(src)} · {group.items.length} item
+                        {group.items.length === 1 ? '' : 's'}
+                      </span>
+                      <span className="font-medium tnum">{formatPrice(group.subtotal)}</span>
+                    </div>
+                  );
+                })}
+
+                <div className="flex justify-between items-baseline gap-4 pt-4">
+                  <span className="t-ui font-medium">Subtotal</span>
+                  <span className="t-h2 tnum">{formatPrice(subTotal)}</span>
+                </div>
+                <p className="t-cap dim mt-2 leading-relaxed">
+                  Shipping and taxes are calculated by each seller at checkout.
+                </p>
+              </div>
+
+              {sourcesInCart.length > 1 && (
+                <Notice icon={<Info size={17} aria-hidden="true" />} className="mt-6">
+                  Your items come from {sourcesInCart.length} different sellers. You'll
+                  check out with each one separately.
+                </Notice>
+              )}
+
+              <div className="mt-6 flex flex-col gap-2.5">
+                {!currentUser ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login')}
+                    className="btn btn-blue btn-lg btn-full"
+                  >
+                    <Lock size={15} aria-hidden="true" /> Sign in to check out
+                  </button>
+                ) : (
+                  sourcesInCart.map((src) => {
+                    const group = itemsBySource[src];
+                    return (
+                      <div
+                        key={src}
+                        className="border border-hairline rounded-tile p-4 flex flex-col gap-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <SourcePill provider={src} size="xs" />
+                          <span className="t-ui font-medium tnum">
+                            {formatPrice(group.subtotal)}
                           </span>
                         </div>
-                      );
-                    })}
-                    <div className="border-t border-ink-100 pt-3 flex justify-between items-baseline">
-                      <span className="text-sm font-medium text-ink-700">Subtotal</span>
-                      <span className="text-2xl font-bold text-ink-900">
-                        ${subTotal.toFixed(2)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-ink-500">
-                      Shipping and taxes are calculated by each seller at checkout.
-                    </p>
-                  </div>
-
-                  {sourcesInCart.length > 1 && (
-                    <div className="mt-4 p-3 rounded-xl bg-amber-50/80 border border-amber-100 text-xs text-amber-800 leading-relaxed flex gap-2">
-                      <FaInfoCircle className="shrink-0 mt-0.5" />
-                      <span>
-                        Your items come from {sourcesInCart.length} different sellers.
-                        You'll check out with each one separately.
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="mt-5 space-y-2.5">
-                    {!currentUser ? (
-                      <button
-                        onClick={() => navigate('/login')}
-                        className="btn-primary w-full !py-3.5 text-base"
-                      >
-                        <FaLock className="text-xs" /> Sign in to check out
-                      </button>
-                    ) : (
-                      sourcesInCart.map((src) => {
-                        const group = itemsBySource[src];
-                        const label = sellerLabel(src);
-                        return (
-                          <button
-                            key={src}
-                            onClick={() => handleSourceCheckout(src)}
-                            className="w-full inline-flex items-center justify-between gap-2 px-5 py-3.5 rounded-full font-semibold text-sm shadow-md hover:shadow-lg hover:brightness-105 active:scale-[0.98] transition-all text-white"
-                            style={{
-                              background:
-                                src === 'amazon'
-                                  ? 'linear-gradient(135deg,#FF9900,#FFB444)'
-                                  : 'linear-gradient(135deg,#0071ce,#0a96f5)',
-                              color: src === 'amazon' ? '#111' : '#fff',
-                            }}
-                          >
-                            <span className="flex items-center gap-2">
-                              Continue on {label}
-                              <FaArrowRight className="text-xs" />
-                            </span>
-                            <span className="text-xs opacity-90">
-                              ${group.subtotal.toFixed(2)}
-                            </span>
-                          </button>
-                        );
-                      })
-                    )}
-                    <button
-                      onClick={() => navigate('/home')}
-                      className="btn-secondary w-full"
-                    >
-                      Continue shopping
-                    </button>
-                  </div>
-                </div>
-
-                <div className="glass rounded-2xl p-4 text-xs text-ink-600 flex gap-2 leading-relaxed">
-                  <FaLock className="text-brand-500 mt-0.5 shrink-0" />
-                  <span>
-                    Trendy Treasures never sees your payment details. Each
-                    seller processes your card on their own secure checkout.
-                  </span>
-                </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSourceCheckout(src)}
+                          className="btn btn-blue btn-full"
+                        >
+                          Continue on {sellerLabel(src)}
+                          <ArrowRight size={15} aria-hidden="true" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
+
+              <p className="rail-fact mt-6">
+                <Lock size={15} aria-hidden="true" />
+                <span>
+                  Trendy Treasures never sees your payment details. Each seller
+                  processes your card on their own secure checkout.
+                </span>
+              </p>
             </aside>
           </div>
         )}

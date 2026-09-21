@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaShoppingCart, FaUserCircle, FaSearch, FaSignOutAlt, FaTrashAlt, FaSignInAlt, FaBell } from 'react-icons/fa';
+import { ShoppingBag, Search, Bell, LogOut, Trash2, LogIn, User, ChevronDown } from 'lucide-react';
 import { handleCartClick, handleError, handleSuccess, apiFetch, logoutUser, showConfirm } from '../utils';
 import BrandMark from './BrandMark';
 
 /**
- * Sticky frosted-glass top navigation used on every storefront page.
- * Renders the brand, an optional search box (controlled via props), the cart
- * icon, and a user dropdown. Keeping this in one place removes the ~80 lines
- * of header markup that each storefront component used to repeat.
+ * The 56px translucent bar on every storefront page — taller than Apple's
+ * 44px marketing bar because this one carries a working search field.
+ *
+ * Brand, optional search (controlled by the page), cart badge and the
+ * account menu. Everything the previous header did, it still does.
  */
 function SiteHeader({
   currentUser,
@@ -22,9 +23,7 @@ function SiteHeader({
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  // Close the dropdown when the user clicks outside of it — small detail but
-  // expected behavior on every production site and removes the awkward
-  // "click-the-icon-again" interaction the legacy site had.
+  // Close the dropdown when the user clicks outside of it.
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -34,6 +33,16 @@ function SiteHeader({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Escape closes the menu too, so the keyboard can get back out of it.
+  useEffect(() => {
+    if (!showDropdown) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setShowDropdown(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showDropdown]);
 
   const handleLogout = async () => {
     await logoutUser();
@@ -78,148 +87,128 @@ function SiteHeader({
 
   const initial = currentUser?.name?.[0]?.toUpperCase() || '';
 
+  const searchField = (
+    <label className="search">
+      <Search size={15} aria-hidden="true" className="shrink-0" />
+      <input
+        type="search"
+        value={searchValue || ''}
+        onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+        placeholder="Search products"
+        aria-label="Search products"
+      />
+    </label>
+  );
+
   return (
-    <header className="sticky top-0 z-50 glass-strong">
-      <div className="store-shell">
-        <div className="grid grid-cols-[auto_auto] md:grid-cols-[minmax(190px,240px)_minmax(240px,1fr)_minmax(160px,240px)] lg:grid-cols-[minmax(220px,300px)_minmax(360px,1fr)_minmax(220px,300px)] items-center gap-3 md:gap-5 py-3">
-          {/* Brand */}
-          <Link to="/home" className="flex items-center gap-2 shrink-0 group justify-self-start">
-            <div className="w-10 h-10 rounded-2xl bg-brand-gradient flex items-center justify-center shadow-lg shadow-brand-500/30 group-hover:scale-105 transition-transform">
-              <BrandMark className="w-5 h-5 text-white" />
-            </div>
-            <div className="hidden sm:flex flex-col leading-tight">
-              <span className="font-display font-bold text-lg text-ink-900 tracking-tight">
-                Trendy Treasures
-              </span>
-              <span className="text-[10px] uppercase tracking-[0.18em] text-ink-500 font-semibold">
-                Compare · track · save
-              </span>
-            </div>
-          </Link>
+    <header className="nav">
+      <div className="nav-inner">
+        {/* Brand is the gem alone, the way Apple's global nav is the logo
+            alone. The name is carried by the footer and the page title. */}
+        <Link to="/home" className="nav-mark" aria-label="Trendy Treasures — home">
+          <BrandMark className="w-7 h-7 shrink-0" />
+        </Link>
 
-          {/* Search bar */}
-          {showSearch && (
-            <div className="hidden md:block w-full max-w-4xl justify-self-center">
-              <div className="relative">
-                <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-ink-400 text-sm" />
-                <input
-                  type="text"
-                  value={searchValue || ''}
-                  onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-                  placeholder="Search across Amazon, Walmart and more…"
-                  className="w-full pl-12 pr-5 py-2.5 rounded-full bg-white/80 border border-ink-200/80 text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:bg-white focus:shadow-focus transition-all"
-                />
-              </div>
-            </div>
-          )}
-          {!showSearch && <div className="hidden md:block" />}
+        {/* Search — the centre column of the bar */}
+        {showSearch ? (
+          <div className="hidden md:block nav-search">{searchField}</div>
+        ) : (
+          <div className="hidden md:block" />
+        )}
 
-          {/* Cart + Profile */}
-          <div className="justify-self-end flex items-center gap-2">
+        <div className="flex items-center gap-1 ml-auto">
+          <button
+            type="button"
+            onClick={() => handleCartClick(navigate)}
+            className="nav-icon"
+            aria-label={cartCount > 0 ? `Open cart, ${cartCount} items` : 'Open cart'}
+          >
+            <ShoppingBag size={19} aria-hidden="true" />
+            {cartCount > 0 && (
+              <span className="nav-badge">{cartCount > 99 ? '99+' : cartCount}</span>
+            )}
+          </button>
+
+          <div className="relative" ref={dropdownRef}>
             <button
               type="button"
-              onClick={() => handleCartClick(navigate)}
-              className="relative p-2.5 rounded-full hover:bg-ink-100 transition-colors group"
-              aria-label="Open cart"
+              onClick={() => setShowDropdown((v) => !v)}
+              className="nav-account"
+              aria-haspopup="menu"
+              aria-expanded={showDropdown}
+              aria-label={currentUser ? 'Account menu' : 'Sign in'}
             >
-              <FaShoppingCart className="text-xl text-ink-700 group-hover:text-brand-700 transition-colors" />
-              {cartCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-gradient text-white text-[10px] font-bold flex items-center justify-center shadow-md shadow-brand-500/40">
-                  {cartCount > 99 ? '99+' : cartCount}
-                </span>
+              {currentUser ? (
+                <span className="nav-initial" aria-hidden="true">{initial}</span>
+              ) : (
+                <User size={19} className="dim" aria-hidden="true" />
               )}
+              <span className="hidden lg:inline t-ui font-medium max-w-[120px] truncate">
+                {currentUser ? currentUser.name : 'Sign in'}
+              </span>
+              <ChevronDown size={13} className="dimmer hidden lg:block" aria-hidden="true" />
             </button>
 
-            <div className="relative" ref={dropdownRef}>
-              <button
-                type="button"
-                onClick={() => setShowDropdown((v) => !v)}
-                className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full hover:bg-ink-100 transition-colors"
-                aria-label="Open profile menu"
-              >
+            {showDropdown && (
+              <div className="menu absolute right-0 top-[46px] z-[95] animate-popIn" role="menu">
                 {currentUser ? (
-                  <span className="w-8 h-8 rounded-full bg-brand-gradient text-white text-sm font-bold flex items-center justify-center shadow-md shadow-brand-500/30">
-                    {initial}
-                  </span>
-                ) : (
-                  <FaUserCircle className="text-2xl text-ink-600" />
-                )}
-                <span className="hidden lg:inline text-sm font-medium text-ink-700 max-w-[120px] truncate">
-                  {currentUser ? currentUser.name : 'Sign in'}
-                </span>
-              </button>
-
-              {showDropdown && (
-                <div className="absolute top-full right-0 mt-2 w-60 glass-strong rounded-2xl py-2 animate-pop overflow-hidden">
-                  {currentUser ? (
-                    <>
-                      <div className="px-4 py-3 border-b border-white/40">
-                        <p className="text-sm font-semibold text-ink-900 truncate">
-                          {currentUser.name}
-                        </p>
-                        <p className="text-xs text-ink-500 truncate">
-                          {currentUser.email}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setShowDropdown(false);
-                          navigate('/alerts');
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-700 hover:bg-white/60 transition-colors"
-                      >
-                        <FaBell className="text-ink-500" />
-                        Price alerts
-                      </button>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-700 hover:bg-white/60 transition-colors"
-                      >
-                        <FaSignOutAlt className="text-ink-500" />
-                        Log out
-                      </button>
-                      <button
-                        onClick={handleDeleteAccount}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50/80 transition-colors"
-                      >
-                        <FaTrashAlt />
-                        Delete account
-                      </button>
-                    </>
-                  ) : (
+                  <>
+                    <div className="menu-head">
+                      <p className="t-ui font-medium truncate">{currentUser.name}</p>
+                      <p className="text-cap dimmer truncate mt-0.5">{currentUser.email}</p>
+                    </div>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => {
                         setShowDropdown(false);
-                        navigate('/login');
+                        navigate('/alerts');
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-700 hover:bg-white/60 transition-colors"
                     >
-                      <FaSignInAlt className="text-ink-500" />
-                      Sign in
+                      <Bell size={16} aria-hidden="true" />
+                      Price alerts
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="danger"
+                      onClick={handleDeleteAccount}
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                      Delete account
+                    </button>
+                    {/* Log out sits last — it is the item people reach for
+                        most, and the one that should be furthest from the
+                        destructive action above it. */}
+                    <button type="button" role="menuitem" onClick={handleLogout}>
+                      <LogOut size={16} aria-hidden="true" />
+                      Log out
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowDropdown(false);
+                      navigate('/login');
+                    }}
+                  >
+                    <LogIn size={16} aria-hidden="true" />
+                    Sign in
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Mobile search */}
-        {showSearch && (
-          <div className="md:hidden pb-3">
-            <div className="relative">
-              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400 text-sm" />
-              <input
-                type="text"
-                value={searchValue || ''}
-                onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-                placeholder="Search products…"
-                className="w-full pl-11 pr-4 py-2 rounded-full bg-white/80 border border-ink-200/80 text-sm focus:outline-none focus:border-brand-400 focus:bg-white transition-all"
-              />
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Search — its own row below 768, where the three-column grid would
+          squeeze it to nothing. */}
+      {showSearch && (
+        <div className="md:hidden shell-wide pb-2.5 -mt-0.5">{searchField}</div>
+      )}
     </header>
   );
 }

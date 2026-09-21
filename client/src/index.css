@@ -2,206 +2,2104 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Base layer ────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   Trendy Treasures — Apple-inspired interface.
+
+   Four surface treatments are used across the product so no page reads as
+   one card repeated: full-bleed section, haze band, borderless tile, and
+   hairline rail or table.
+
+   Everything repeated more than twice lives here as a component class.
+   One-off layout stays in the JSX as Tailwind utilities.
+   ═══════════════════════════════════════════════════════════════════════ */
+
 @layer base {
+  :root {
+    --paper: #ffffff;
+    --haze: #f5f5f7;
+    --haze-deep: #e8e8ed;
+    --hairline: #d2d2d7;
+    --hairline-soft: #e8e8ed;
+
+    --ink: #1d1d1f;
+    --ink-2: #6e6e73;
+    --ink-3: #86868b;
+    --ink-4: #aeaeb2;
+
+    --blue: #0071e3;
+    --blue-hover: #0077ed;
+    --blue-press: #006edb;
+    --blue-wash: #e8f2fd;
+    --link: #0066cc;
+
+    --green: #008009;
+    --green-wash: #e3f5e6;
+    --amber: #bf4800;
+    --amber-wash: #fdf0e7;
+    --red: #e30000;
+    --red-wash: #fdecec;
+
+    --amazon: #e08300;
+    --walmart: #0071dc;
+
+    --r-hair: 6px;
+    --r-ctl: 8px;
+    --r-fld: 12px;
+    --r-tile: 18px;
+    --r-card: 28px;
+    --r-pill: 980px;
+
+    --lift: 0 4px 24px rgba(0, 0, 0, 0.06);
+    --lift-h: 0 12px 40px rgba(0, 0, 0, 0.1);
+    --modal: 0 24px 68px rgba(0, 0, 0, 0.22);
+
+    --glass: saturate(180%) blur(20px);
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-bg-2: rgba(250, 250, 252, 0.94);
+
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --fast: 180ms;
+    --base: 320ms;
+
+    --nav-h: 56px;
+  }
+
   *,
   ::before,
   ::after {
     box-sizing: border-box;
   }
 
-  html,
-  body,
-  #root {
-    height: 100%;
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply font-sans text-ink-800 antialiased;
     margin: 0;
-    background: #fafbff;
-    background-image:
-      radial-gradient(at 18% 8%, rgba(255, 200, 221, 0.6) 0px, transparent 55%),
-      radial-gradient(at 82% 4%, rgba(186, 211, 255, 0.55) 0px, transparent 55%),
-      radial-gradient(at 50% 100%, rgba(221, 214, 254, 0.6) 0px, transparent 55%),
-      linear-gradient(180deg, #fafbff 0%, #f5f3ff 100%);
-    background-attachment: fixed;
+    min-height: 100%;
+    font-family: theme('fontFamily.sans');
+    font-size: 17px;
+    line-height: 1.47;
+    letter-spacing: -0.004em;
+    color: var(--ink);
+    background: var(--paper);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    min-height: 100vh;
+    font-synthesis: none;
   }
 
-  h1,
-  h2,
-  h3,
-  h4 {
-    @apply font-display tracking-tight text-ink-900;
-  }
-
-  /* Strip the legacy body flex centering that older pages relied on so the
-     redesigned pages can take full width without being wrapped in a flex box. */
+  #root,
   .App {
     min-height: 100vh;
   }
 
-  /* Smooth scrollbar on Webkit so the glass surfaces don't feel jarring */
+  img,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  /* Apple sets display type at semibold, never at black. The weight
+     restraint is what keeps a 72px headline from shouting. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
+    margin: 0;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  p {
+    margin: 0;
+  }
+
+  /* One visible focus ring everywhere — Apple's 4px blue halo. */
+  :focus-visible {
+    outline: 4px solid rgba(0, 113, 227, 0.4);
+    outline-offset: 2px;
+    border-radius: var(--r-hair);
+  }
+
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 11px;
+    height: 11px;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(99, 102, 241, 0.25);
+    background: rgba(120, 120, 128, 0.32);
     border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(99, 102, 241, 0.4);
+    background: rgba(120, 120, 128, 0.5);
+    background-clip: content-box;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* ─── Component primitives ─────────────────────────────────────────────── */
 @layer components {
-  /* Frosted glass surface — used on the sticky header, modals, and dropdowns.
-     Backdrop-filter is the core of the "liquid glass" feel; the white tint
-     keeps text legible over the colorful page gradient. */
-  .glass {
-    @apply bg-white/60 backdrop-blur-xl backdrop-saturate-150 border border-white/40 shadow-glass;
+  /* ── 1 · Layout ─────────────────────────────────────────────────────── */
+  .shell-wide {
+    width: 100%;
+    margin: 0 auto;
+    max-width: 1440px;
+    padding: 0 20px;
+  }
+  .shell-page {
+    width: 100%;
+    margin: 0 auto;
+    max-width: 980px;
+    padding: 0 20px;
+  }
+  @media (min-width: 768px) {
+    .shell-wide,
+    .shell-page {
+      padding: 0 32px;
+    }
+  }
+  .measure {
+    max-width: 692px;
+  }
+  .band {
+    background: var(--haze);
+  }
+  .rule {
+    height: 1px;
+    background: var(--hairline);
+    border: 0;
+    margin: 0;
   }
 
-  .glass-strong {
-    @apply bg-white/75 backdrop-blur-2xl backdrop-saturate-150 border border-white/50 shadow-glass;
+  /* ── 2 · Type roles ─────────────────────────────────────────────────────
+     Sizes step UP at 768 and 1280 so a 72px headline is never 72px on a
+     393-point phone. */
+  .t-d1,
+  .t-d2,
+  .t-d3,
+  .t-h1,
+  .t-h2,
+  .t-h3,
+  .t-h4 {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .t-d1 {
+    font-size: 40px;
+    line-height: 1.07;
+    letter-spacing: -0.022em;
+  }
+  .t-d2 {
+    font-size: 34px;
+    line-height: 1.09;
+    letter-spacing: -0.02em;
+  }
+  .t-d3 {
+    font-size: 30px;
+    line-height: 1.11;
+    letter-spacing: -0.018em;
+  }
+  .t-h1 {
+    font-size: 27px;
+    line-height: 1.15;
+    letter-spacing: -0.016em;
+  }
+  .t-h2 {
+    font-size: 24px;
+    line-height: 1.18;
+    letter-spacing: -0.015em;
+  }
+  .t-h3 {
+    font-size: 21px;
+    line-height: 1.22;
+    letter-spacing: -0.013em;
+  }
+  .t-h4 {
+    font-size: 18px;
+    line-height: 1.26;
+    letter-spacing: -0.01em;
+  }
+  .t-lead {
+    font-size: 18px;
+    line-height: 1.44;
+    letter-spacing: -0.006em;
+    font-weight: 400;
+  }
+  .t-body {
+    font-size: 16px;
+    line-height: 1.5;
+    letter-spacing: -0.004em;
+  }
+  .t-ui {
+    font-size: 14px;
+    line-height: 1.43;
+  }
+  .t-cap {
+    font-size: 12px;
+    line-height: 1.34;
+    letter-spacing: 0.004em;
   }
 
-  .glass-dark {
-    @apply bg-ink-900/70 backdrop-blur-xl backdrop-saturate-150 border border-white/10 text-white;
+  @media (min-width: 768px) {
+    .t-d1 {
+      font-size: 56px;
+      letter-spacing: -0.024em;
+    }
+    .t-d2 {
+      font-size: 44px;
+    }
+    .t-d3 {
+      font-size: 36px;
+    }
+    .t-h1 {
+      font-size: 30px;
+    }
+    .t-h2 {
+      font-size: 26px;
+    }
+    .t-h3 {
+      font-size: 22px;
+    }
+    .t-h4 {
+      font-size: 19px;
+    }
+    .t-lead {
+      font-size: 19px;
+    }
+    .t-body {
+      font-size: 17px;
+    }
+  }
+  @media (min-width: 1280px) {
+    .t-d1 {
+      font-size: 72px;
+      letter-spacing: -0.026em;
+    }
+    .t-d2 {
+      font-size: 56px;
+      letter-spacing: -0.022em;
+    }
+    .t-d3 {
+      font-size: 40px;
+      letter-spacing: -0.02em;
+    }
+    .t-h1 {
+      font-size: 32px;
+      letter-spacing: -0.018em;
+    }
+    .t-h2 {
+      font-size: 28px;
+    }
+    .t-h3 {
+      font-size: 24px;
+    }
+    .t-h4 {
+      font-size: 21px;
+    }
   }
 
-  /* Solid card — used for product tiles, cart line items, dashboards. Keeps
-     text contrast high against the busy page background. */
-  .card {
-    @apply bg-white rounded-3xl shadow-card border border-ink-100/60 transition-all duration-300;
+  .dim {
+    color: var(--ink-2);
+  }
+  .dimmer {
+    color: var(--ink-3);
+  }
+  .faint {
+    color: var(--ink-4);
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .mono {
+    font-family: theme('fontFamily.mono');
+    font-size: 13px;
+    letter-spacing: 0;
+  }
+  .clamp2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
-  .card-interactive {
-    @apply card hover:-translate-y-1 hover:shadow-card-hover hover:border-brand-200/80 cursor-pointer;
+  /* Apple's eyebrow is a coloured, sentence-case, body-size line. It is
+     never tracked-out uppercase. */
+  .eyebrow {
+    font-size: 15px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.004em;
+    color: var(--amber);
+  }
+  .eyebrow-blue {
+    color: var(--blue);
+  }
+  .eyebrow-ink {
+    color: var(--ink-2);
+    font-weight: 400;
   }
 
-  /* Brand button — primary CTA, gradient pill */
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
-           bg-brand-gradient text-white font-semibold text-sm
-           shadow-lg shadow-brand-500/30
-           hover:shadow-xl hover:shadow-brand-500/40 hover:brightness-110
-           active:scale-[0.98]
-           focus:outline-none focus:ring-4 focus:ring-brand-500/30
-           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  .link {
+    color: var(--link);
+    text-decoration: none;
+    transition: color var(--fast) var(--ease);
+  }
+  .link:hover {
+    text-decoration: underline;
   }
 
-  /* Glass / outline secondary button */
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full
-           bg-white/70 backdrop-blur-md text-ink-800 font-semibold text-sm
-           border border-ink-200/70 shadow-soft
-           hover:bg-white hover:border-brand-300 hover:text-brand-700
-           active:scale-[0.98]
-           focus:outline-none focus:ring-4 focus:ring-brand-500/20
-           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  /* ── 3 · Site header ────────────────────────────────────────────────── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass);
+    -webkit-backdrop-filter: var(--glass);
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .nav-inner {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 20px;
+    min-height: var(--nav-h);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  @media (min-width: 768px) {
+    .nav-inner {
+      padding: 0 32px;
+      display: grid;
+      /* Equal flanks with the field sized to its content between them, so
+         the search sits on the true centre of the bar instead of
+         stretching into whatever room the gem and the actions leave. */
+      grid-template-columns: 1fr auto 1fr;
+      gap: 24px;
+    }
   }
 
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full
-           text-ink-600 font-medium text-sm hover:bg-ink-100 hover:text-ink-900
-           focus:outline-none focus:ring-2 focus:ring-brand-500/30
-           transition-colors;
+  .nav-search {
+    width: 100%;
+  }
+  @media (min-width: 768px) {
+    .nav-search {
+      width: 340px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .nav-search {
+      width: 420px;
+    }
+  }
+  .nav-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: var(--ink);
+    flex: none;
+  }
+  /* Wordmark: one family, two weights. "Trendy" carries the emphasis and
+     "Treasures" stays in book weight, so the lockup reads as a single
+     phrase rather than two words fighting. */
+  .brand-word {
+    font-weight: 400;
+    letter-spacing: -0.021em;
+    white-space: nowrap;
+    color: inherit;
+  }
+  .brand-word b {
+    font-weight: 700;
   }
 
+  .nav-mark-name {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    line-height: 1.15;
+  }
+  .nav-mark-tag {
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+  }
+  .nav-icon {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--r-pill);
+    display: grid;
+    place-items: center;
+    color: var(--ink);
+    flex: none;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    transition: background var(--fast) var(--ease);
+  }
+  .nav-icon:hover {
+    background: rgba(120, 120, 128, 0.12);
+  }
+  .nav-badge {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--r-pill);
+    background: var(--blue);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    letter-spacing: 0;
+    border: 2px solid var(--paper);
+    box-sizing: content-box;
+  }
+  .nav-account {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 10px 0 8px;
+    border-radius: var(--r-pill);
+    color: var(--ink);
+    background: none;
+    border: 0;
+    cursor: pointer;
+    transition: background var(--fast) var(--ease);
+  }
+  .nav-account:hover {
+    background: rgba(120, 120, 128, 0.12);
+  }
+  .nav-initial {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex: none;
+  }
+
+  /* Contextual bar under the header: page title and its one action. */
+  .pagebar {
+    position: sticky;
+    top: var(--nav-h);
+    z-index: 80;
+    background: var(--glass-bg-2);
+    backdrop-filter: var(--glass);
+    -webkit-backdrop-filter: var(--glass);
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .pagebar-inner {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 20px;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  @media (min-width: 768px) {
+    .pagebar-inner {
+      padding: 0 32px;
+    }
+  }
+
+  /* ── 4 · Buttons ─────────────────────────────────────────────────────
+     Apple's pill. One filled blue per viewport; everything else is a
+     hairline outline or a plain blue word. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: none;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
+      border-color var(--fast) var(--ease), opacity var(--fast) var(--ease);
+  }
+  .btn > svg {
+    flex: none;
+  }
+  .btn-blue {
+    background: var(--blue);
+    color: #fff;
+  }
+  .btn-blue:hover {
+    background: var(--blue-hover);
+  }
+  .btn-blue:active {
+    background: var(--blue-press);
+  }
+  .btn-outline {
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    background: transparent;
+  }
+  .btn-outline:hover {
+    background: var(--blue);
+    color: #fff;
+  }
+  .btn-quiet {
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    background: var(--paper);
+  }
+  .btn-quiet:hover {
+    background: var(--haze);
+    border-color: var(--ink-4);
+  }
+  .btn-plain {
+    color: var(--link);
+    padding: 0 4px;
+    height: auto;
+  }
+  .btn-plain:hover {
+    text-decoration: underline;
+  }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full
-           bg-red-50 text-red-700 font-semibold text-sm border border-red-100
-           hover:bg-red-100 hover:border-red-200
-           focus:outline-none focus:ring-4 focus:ring-red-500/20
-           transition-colors;
+    border: 1px solid var(--red);
+    color: var(--red);
+    background: transparent;
+  }
+  .btn-danger:hover {
+    background: var(--red);
+    color: #fff;
+  }
+  .btn-danger-solid {
+    background: var(--red);
+    color: #fff;
+  }
+  .btn-danger-solid:hover {
+    filter: brightness(1.08);
+  }
+  .btn-lg {
+    height: 46px;
+    padding: 0 24px;
+    font-size: 17px;
+  }
+  .btn-sm {
+    height: 28px;
+    padding: 0 13px;
+    font-size: 12px;
+  }
+  .btn-full {
+    width: 100%;
+  }
+  .btn:disabled,
+  .btn[disabled] {
+    opacity: 0.36;
+    pointer-events: none;
   }
 
-  /* Field — used on every form. Pill-shaped, focus glow. */
-  .field-label {
-    @apply block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-2;
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: none;
+    display: grid;
+    place-items: center;
+    color: var(--ink-3);
+    cursor: pointer;
+    flex: none;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .icon-btn:hover {
+    background: var(--haze);
+    color: var(--ink);
+  }
+  .icon-btn-danger:hover {
+    background: var(--red-wash);
+    color: var(--red);
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    pointer-events: none;
   }
 
-  .field-input {
-    @apply w-full px-5 py-3.5 rounded-2xl
-           bg-white/80 backdrop-blur-md
-           border border-ink-200/80
-           text-ink-900 placeholder:text-ink-400 text-base
-           shadow-soft
-           focus:outline-none focus:border-brand-400 focus:bg-white focus:shadow-focus
-           transition-all duration-200;
+  /* ── 5 · Selection and input ────────────────────────────────────────── */
+  .segmented {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    background: rgba(120, 120, 128, 0.12);
+    border-radius: 9px;
+  }
+  .segmented button {
+    height: 28px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+    opacity: 0.72;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--fast) var(--ease), opacity var(--fast) var(--ease);
+  }
+  .segmented button:hover {
+    opacity: 1;
+  }
+  .segmented button[aria-selected='true'] {
+    background: var(--paper);
+    opacity: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.09), 0 1px 1px rgba(0, 0, 0, 0.04);
+  }
+  .segmented-lg button {
+    height: 34px;
+    padding: 0 18px;
+    font-size: 14px;
   }
 
-  /* Source pill badges (Amazon / Walmart on product cards) */
-  .source-pill {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold;
+  /* macOS pop-up button. The app uses a <select> for sort and for quantity,
+     so the redesign keeps a select and styles it as one. */
+  .select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
   }
-  .source-pill-amazon {
-    @apply source-pill bg-orange-50 text-orange-700 border border-orange-100;
+  .select select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 32px;
+    padding: 0 32px 0 12px;
+    border-radius: var(--r-ctl);
+    border: 1px solid var(--hairline);
+    background: var(--paper);
+    font-size: 14px;
+    color: var(--ink);
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
   }
-  .source-pill-walmart {
-    @apply source-pill bg-blue-50 text-blue-700 border border-blue-100;
+  .select select:focus-visible {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.28);
+    outline: none;
+  }
+  .select::after {
+    content: '';
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    transform: translateY(-65%) rotate(45deg);
+    pointer-events: none;
+    border-right: 1.6px solid var(--ink-3);
+    border-bottom: 1.6px solid var(--ink-3);
+    border-radius: 0 0 2px 0;
+  }
+  .select-lg select {
+    height: 40px;
+    font-size: 17px;
+    padding: 0 36px 0 14px;
   }
 
-  /* Status chips */
-  .chip-success {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
-           bg-emerald-50 text-emerald-700 border border-emerald-100;
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 36px;
+    border-radius: var(--r-ctl);
+    background: rgba(120, 120, 128, 0.1);
+    padding: 0 12px;
+    gap: 8px;
+    color: var(--ink-3);
+    transition: background var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
   }
-  .chip-danger {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
-           bg-red-50 text-red-700 border border-red-100;
+  .search:focus-within {
+    background: var(--paper);
+    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.28), inset 0 0 0 1px var(--hairline);
   }
-
-  /* Marketing gradient text */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-brand-gradient;
+  .search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: none;
+    outline: none;
+    font-size: 14px;
+    letter-spacing: -0.006em;
+    color: var(--ink);
   }
-
-  /* Page container width */
-  .page-shell {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-  }
-
-  .store-shell {
-    @apply w-full mx-auto px-4 sm:px-6 lg:px-8 2xl:px-10;
-    max-width: 1920px;
-  }
-}
-
-/* ─── Utilities ────────────────────────────────────────────────────────── */
-@layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    scrollbar-width: none;
+  .search input::placeholder {
+    color: var(--ink-3);
   }
 
-  /* CenterToast entrance/exit — pill scales + fades in from center, fades
-     out upward on dismiss. Defined here (not as inline style) so the timing
-     curve stays consistent across all toasts. */
-  @keyframes ct-in {
-    0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
-    100% { opacity: 1; transform: translateY(0)   scale(1); }
+  /* ── 6 · Seller identity ─────────────────────────────────────────────
+     A glyph in the seller's own colour at 14px, the name in ink, inside a
+     neutral container. Immediately readable; never dominant. */
+  .seller {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink);
+    letter-spacing: -0.002em;
+    white-space: nowrap;
   }
-  @keyframes ct-out {
-    0%   { opacity: 1; transform: translateY(0)    scale(1); }
-    100% { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  .seller-glyph {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    display: block;
   }
-  .ct-entering {
-    animation: ct-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    will-change: transform, opacity;
+  .seller-amazon .seller-glyph {
+    color: var(--amazon);
   }
-  .ct-leaving {
-    animation: ct-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
+  .seller-walmart .seller-glyph {
+    color: var(--walmart);
+  }
+  .seller-boxed {
+    height: 26px;
+    padding: 0 10px;
+    gap: 7px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-pill);
+    background: var(--paper);
+  }
+  .seller-xs {
+    font-size: 11px;
+  }
+  .seller-xs .seller-glyph {
+    width: 12px;
+    height: 12px;
+  }
+  .seller-xs.seller-boxed {
+    height: 22px;
+    padding: 0 8px;
+    gap: 5px;
+  }
+  .seller-lg {
+    font-size: 14px;
+  }
+  .seller-lg .seller-glyph {
+    width: 17px;
+    height: 17px;
+  }
+  .seller-lg.seller-boxed {
+    height: 32px;
+    padding: 0 13px;
+  }
+  /* On a filled seller-coloured button the glyph has to invert. */
+  .seller-on-dark,
+  .seller-on-dark .seller-glyph {
+    color: #fff;
+  }
+
+  .stars {
+    display: inline-flex;
+    gap: 1.5px;
+    color: var(--hairline);
+    line-height: 1;
+  }
+  .stars .on {
+    color: #f0a30a;
+  }
+
+  /* ── 7 · Product tile ────────────────────────────────────────────────
+     Image centred on haze; metadata left-aligned beneath, because a card
+     carrying a seller, a two-line name, a rating, a price and a shipping
+     line is unreadable when every row is centred. */
+  .grid-tiles {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  @media (min-width: 640px) {
+    .grid-tiles {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .grid-tiles {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1280px) {
+    .grid-tiles {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  .tile {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 18px;
+    border: 0;
+    border-radius: var(--r-tile);
+    background: var(--paper);
+    text-align: left;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: background var(--base) var(--ease);
+  }
+  .tile:hover {
+    background: var(--haze);
+  }
+  .tile-art {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: var(--r-tile);
+    background: var(--haze);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .tile:hover .tile-art {
+    background: var(--haze-deep);
+  }
+  .tile-art img {
+    width: 76%;
+    height: 76%;
+    object-fit: contain;
+    transition: transform var(--base) var(--ease-out);
+  }
+  .tile:hover .tile-art img {
+    transform: scale(1.045);
+  }
+  .tile-oos {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: var(--r-pill);
+    background: var(--paper);
+    color: var(--ink-2);
+    font-size: 11px;
+    line-height: 22px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+  .tile-body {
+    padding: 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    flex: 1;
+  }
+  .tile-name {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.006em;
+    line-height: 1.35;
+    min-height: 38px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--ink);
+  }
+  .tile-price {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (min-width: 768px) {
+    .tile-price {
+      font-size: 21px;
+    }
+  }
+  .tile-ship {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--green);
+  }
+  .tile-cta {
+    margin-top: 4px;
+    align-self: flex-start;
+    height: 28px;
+    padding: 0 14px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    font-size: 12px;
+    line-height: 26px;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .tile:hover .tile-cta {
+    background: var(--blue);
+    color: #fff;
+  }
+
+  /* ── 8 · Status, notice, chip ───────────────────────────────────────── */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 14px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .status::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-4);
+    flex: none;
+  }
+  .status-ok::before {
+    background: var(--green);
+  }
+  .status-warn::before {
+    background: var(--amber);
+  }
+  .status-bad::before {
+    background: var(--red);
+  }
+  .status-lg {
+    font-size: 17px;
+    font-weight: 500;
+  }
+
+  /* A notice is a hairline strip in the flow of the page, not a coloured
+     card floating inside it. */
+  .notice {
+    display: flex;
+    gap: 12px;
+    padding: 15px 0;
+    align-items: flex-start;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .notice > svg {
+    flex: none;
+    margin-top: 1px;
+    color: var(--ink-3);
+  }
+  .notice b {
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .notice-alert {
+    color: var(--red);
+    border-color: rgba(227, 0, 0, 0.3);
+  }
+  .notice-alert > svg,
+  .notice-alert b {
+    color: var(--red);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 15px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-pill);
+    background: var(--paper);
+    font-size: 12px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  }
+  .chip:hover {
+    background: var(--haze);
+    border-color: var(--ink-4);
+  }
+
+  /* ── 9 · Price history ───────────────────────────────────────────────
+     One stroke, a fill that fades to nothing, three ticks, first and last
+     date. The chart is evidence, not decoration. */
+  .chart-svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    display: block;
+  }
+  .chart-line {
+    fill: none;
+    stroke: var(--blue);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .chart-grid {
+    stroke: var(--hairline);
+    stroke-width: 1;
+    stroke-dasharray: 2 5;
+  }
+  .chart-axis {
+    font-size: 11px;
+    fill: var(--ink-3);
+    letter-spacing: 0;
+  }
+  .chart-dot {
+    fill: var(--blue);
+    stroke: var(--paper);
+    stroke-width: 3;
+  }
+  /* The single entrance animation in the whole product.
+
+     These keyframes are declared here rather than in tailwind.config.js:
+     Tailwind only emits a @keyframes block when a matching `animate-*`
+     utility appears in the markup, and this one is referenced from plain
+     CSS. Without the local declaration the name resolves to nothing, the
+     dash offset never animates away, and the price line never draws. */
+  @keyframes draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .chart-draw {
+    stroke-dasharray: 2600;
+    stroke-dashoffset: 2600;
+    animation: draw 1500ms var(--ease-out) 200ms forwards;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chart-draw {
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
+      animation: none;
+    }
+  }
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--hairline);
+  }
+  @media (min-width: 640px) {
+    .figures {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .figures > div {
+    padding: 16px 16px 0;
+    border-left: 1px solid var(--hairline-soft);
+    min-width: 0;
+  }
+  .figures > div:nth-child(odd) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  @media (min-width: 640px) {
+    .figures > div {
+      padding: 16px 20px 0;
+      border-left: 1px solid var(--hairline-soft);
+    }
+    .figures > div:nth-child(odd) {
+      border-left: 1px solid var(--hairline-soft);
+      padding-left: 20px;
+    }
+    .figures > div:first-child {
+      border-left: 0;
+      padding-left: 0;
+    }
+  }
+  .figure-l {
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .figure-v {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (min-width: 768px) {
+    .figure-v {
+      font-size: 24px;
+    }
+  }
+  .figure-good {
+    color: var(--green);
+  }
+  .figure-bad {
+    color: var(--red);
+  }
+
+  /* ── 10 · AI surfaces ────────────────────────────────────────────────
+     The one place a gradient appears: a thin luminous rule above the panel,
+     marking "this text was generated". It appears nowhere else. */
+  .ai {
+    position: relative;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-tile);
+    padding: 22px;
+    background: var(--paper);
+    overflow: hidden;
+  }
+  @media (min-width: 768px) {
+    .ai {
+      padding: 24px 26px;
+    }
+  }
+  .ai::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, #0a84ff, #8f5cf6 32%, #f0508c 64%, #ff9f0a);
+  }
+  .ai-glyph {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    flex: none;
+    background: linear-gradient(135deg, #0a84ff, #8f5cf6 55%, #f0508c);
+  }
+  .ai-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.008em;
+  }
+  .ai-sub {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 1px;
+  }
+  .ai-verdict {
+    font-size: 19px;
+    line-height: 1.34;
+    letter-spacing: -0.012em;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  @media (min-width: 768px) {
+    .ai-verdict {
+      font-size: 22px;
+      letter-spacing: -0.014em;
+    }
+  }
+  .ai-stat {
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .ai-stat b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  @keyframes shimmer {
+    to {
+      background-position: -220% 0;
+    }
+  }
+  .ai-shimmer {
+    font-size: 14px;
+    background: linear-gradient(90deg, var(--ink-4) 20%, var(--ink) 45%, var(--ink-4) 70%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ai-shimmer {
+      -webkit-text-fill-color: var(--ink-2);
+      animation: none;
+    }
+  }
+
+  /* Messages-style bubbles for the grounded Q&A panel. */
+  .bubble {
+    max-width: 82%;
+    padding: 11px 16px;
+    border-radius: 19px;
+    font-size: 14px;
+    line-height: 1.45;
+    letter-spacing: -0.006em;
+    white-space: pre-line;
+  }
+  .bubble-me {
+    background: var(--blue);
+    color: #fff;
+    margin-left: auto;
+    border-bottom-right-radius: 6px;
+  }
+  .bubble-them {
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+    border-bottom-left-radius: 6px;
+  }
+  .bubble-err {
+    background: var(--red-wash);
+    color: var(--red);
+    border-bottom-left-radius: 6px;
+  }
+
+  /* ── 11 · Buy rail ───────────────────────────────────────────────────
+     Hairline border, no shadow, no fill: it must not compete with the
+     product image. */
+  .rail {
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-tile);
+    padding: 22px;
+    background: var(--paper);
+  }
+  @media (min-width: 768px) {
+    .rail {
+      padding: 26px;
+    }
+  }
+  .rail-price {
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (min-width: 768px) {
+    .rail-price {
+      font-size: 40px;
+    }
+  }
+  .rail-fact {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .rail-fact > svg {
+    flex: none;
+    margin-top: 1px;
+    color: var(--ink-3);
+  }
+
+  /* ── 12 · Forms ──────────────────────────────────────────────────────
+     The floating label needs the input to precede the label in the DOM so
+     `input:focus + label` can reach it. */
+  .field {
+    position: relative;
+  }
+  .field > input,
+  .field > select,
+  .field > textarea {
+    width: 100%;
+    height: 52px;
+    padding: 20px 15px 6px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-fld);
+    background: var(--paper);
+    font-size: 17px;
+    letter-spacing: -0.004em;
+    color: var(--ink);
+    outline: none;
+    transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+  .field > textarea {
+    height: auto;
+    min-height: 92px;
+    resize: vertical;
+  }
+  .field > label {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    font-size: 17px;
+    color: var(--ink-3);
+    letter-spacing: -0.004em;
+    pointer-events: none;
+    transform-origin: 0 0;
+    transition: transform var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .field-filled > label,
+  .field > input:focus + label,
+  .field > select:focus + label,
+  .field > textarea:focus + label {
+    transform: translateY(-9px) scale(0.706);
+  }
+  .field > input:focus,
+  .field > select:focus,
+  .field > textarea:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.28);
+  }
+  .field-error > input,
+  .field-error > select {
+    border-color: var(--red);
+  }
+  .field-hint {
+    font-size: 12px;
+    color: var(--ink-2);
+    margin-top: 7px;
+    line-height: 1.45;
+  }
+  .field-hint-bad {
+    color: var(--red);
+  }
+  .field-reveal {
+    position: absolute;
+    right: 8px;
+    top: 10px;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: var(--r-ctl);
+    background: none;
+    display: grid;
+    place-items: center;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .field-reveal:hover {
+    background: var(--haze);
+    color: var(--ink);
+  }
+
+  /* Dark appearance, used by the admin sign-in page. The change of
+     appearance is itself the signal that this is the operations side. */
+  .field-dark > input {
+    background: #1c1c1e;
+    border-color: #38383a;
+    color: #f5f5f7;
+  }
+  .field-dark > label {
+    color: #8e8e93;
+  }
+  .field-dark > input:focus {
+    border-color: #0a84ff;
+    box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.3);
+  }
+  .field-dark .field-reveal {
+    color: #8e8e93;
+  }
+  .field-dark .field-reveal:hover {
+    background: #2c2c2e;
+    color: #f5f5f7;
+  }
+
+  /* Label-left row, used in the admin forms where density matters. */
+  .formline {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 16px 0;
+    border-top: 1px solid var(--hairline-soft);
+    align-items: start;
+  }
+  @media (min-width: 768px) {
+    .formline {
+      grid-template-columns: 180px 1fr;
+      gap: 24px;
+      padding: 18px 0;
+    }
+    .formline > label {
+      padding-top: 12px;
+    }
+  }
+  .formline > label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .formline input {
+    width: 100%;
+    height: 42px;
+    padding: 0 14px;
+    border-radius: var(--r-ctl);
+    border: 1px solid var(--hairline);
+    background: var(--paper);
+    font-size: 14px;
+    color: var(--ink);
+    outline: none;
+    transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+  .formline input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.28);
+  }
+  .formline .hint {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-top: 7px;
+    line-height: 1.45;
+  }
+
+  /* The 4-digit code the app emails for signup verification and reset. */
+  .passcode {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  @media (min-width: 480px) {
+    .passcode {
+      gap: 12px;
+    }
+  }
+  .passcode input {
+    width: 100%;
+    max-width: 62px;
+    height: 68px;
+    text-align: center;
+    padding: 0;
+    font-size: 30px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-fld);
+    background: var(--paper);
+    color: var(--ink);
+    outline: none;
+    transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+  .passcode input:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.28);
+  }
+  .passcode input.filled {
+    border-color: var(--ink-4);
+  }
+
+  /* PasswordStrengthHint: four bars driven by scorePassword(). */
+  .strength {
+    display: flex;
+    gap: 4px;
+  }
+  .strength i {
+    flex: 1;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--hairline);
+    transition: background var(--fast) var(--ease);
+  }
+  .strength .on-1 {
+    background: var(--red);
+  }
+  .strength .on-2 {
+    background: var(--amber);
+  }
+  .strength .on-3 {
+    background: #b8920a;
+  }
+  .strength .on-4 {
+    background: var(--green);
+  }
+
+  .errbanner {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    border: 1px solid rgba(227, 0, 0, 0.28);
+    background: var(--red-wash);
+    border-radius: var(--r-fld);
+    padding: 13px 15px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--red);
+  }
+  .errbanner > svg {
+    flex: none;
+    margin-top: 1px;
+  }
+
+  /* ── 13 · Table ──────────────────────────────────────────────────────
+     Hairline rows, no zebra, no outer card, no rounded container. Wrapped
+     so it can scroll horizontally on a phone instead of squashing. */
+  .tablewrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table {
+    width: 100%;
+    font-size: 14px;
+    min-width: 640px;
+  }
+  .table th {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-3);
+    padding: 0 16px 10px;
+    border-bottom: 1px solid var(--hairline);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .table th:first-child,
+  .table td:first-child {
+    padding-left: 0;
+  }
+  .table th.right,
+  .table td.right {
+    text-align: right;
+    padding-right: 0;
+  }
+  .table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--hairline-soft);
+    vertical-align: middle;
+  }
+  .table tbody tr:hover td {
+    background: rgba(120, 120, 128, 0.045);
+  }
+  .table .idx {
+    color: var(--ink-4);
+    font-variant-numeric: tabular-nums;
+    width: 40px;
+  }
+
+  .avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    flex: none;
+    background: var(--haze-deep);
+    color: var(--ink-2);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .avatar-admin {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .rolechip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    border: 1px solid var(--hairline);
+    color: var(--ink-2);
+    background: var(--paper);
+    white-space: nowrap;
+  }
+  .rolechip-admin {
+    border-color: var(--ink);
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .token {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .token code {
+    font-family: theme('fontFamily.mono');
+    font-size: 12px;
+    letter-spacing: -0.01em;
+    background: var(--haze);
+    border-radius: var(--r-hair);
+    padding: 5px 9px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink-2);
+    display: inline-block;
+  }
+
+  /* ── 14 · Admin shell ────────────────────────────────────────────────── */
+  .console {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-height: 100vh;
+  }
+  @media (min-width: 1024px) {
+    .console {
+      grid-template-columns: 252px 1fr;
+    }
+  }
+  .sidebar {
+    background: var(--haze);
+    border-right: 1px solid var(--hairline);
+    display: flex;
+    flex-direction: column;
+    padding: 18px 12px;
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    height: 34px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: var(--r-ctl);
+    background: none;
+    font-size: 14px;
+    letter-spacing: -0.006em;
+    color: var(--ink);
+    text-decoration: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--fast) var(--ease);
+  }
+  .sidebar-item > svg {
+    flex: none;
+    color: var(--ink-2);
+  }
+  .sidebar-item:hover {
+    background: rgba(120, 120, 128, 0.12);
+  }
+  .sidebar-item[aria-current='page'] {
+    background: var(--blue);
+    color: #fff;
+    font-weight: 500;
+  }
+  .sidebar-item[aria-current='page'] > svg {
+    color: #fff;
+  }
+  .sidebar-item-danger,
+  .sidebar-item-danger > svg {
+    color: var(--red);
+  }
+  .sidebar-item-danger:hover {
+    background: var(--red-wash);
+  }
+
+  .console-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--glass-bg-2);
+    backdrop-filter: var(--glass);
+    -webkit-backdrop-filter: var(--glass);
+    border-bottom: 1px solid var(--hairline);
+    padding: 13px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  @media (min-width: 768px) {
+    .console-bar {
+      padding: 15px 34px;
+      gap: 18px;
+    }
+  }
+  .console-body {
+    padding: 24px 20px 64px;
+    flex: 1;
+  }
+  @media (min-width: 768px) {
+    .console-body {
+      padding: 32px 34px 64px;
+    }
+  }
+
+  /* ── 15 · Overlays ───────────────────────────────────────────────────── */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+  }
+  .sheet {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: var(--paper);
+    border-radius: 22px;
+    box-shadow: var(--modal);
+    padding: 26px;
+  }
+  @media (min-width: 480px) {
+    .sheet {
+      padding: 28px;
+    }
+  }
+
+  /* Right-side slide-over. The luminous rule sits on the panel itself, so
+     it marks the whole generated surface once rather than once per card. */
+  .sidepanel {
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    height: 100%;
+    background: var(--paper);
+    box-shadow: var(--modal);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidepanel::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    z-index: 1;
+    background: linear-gradient(90deg, #0a84ff, #8f5cf6 32%, #f0508c 64%, #ff9f0a);
+  }
+  .sidepanel-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 22px 16px;
+    border-bottom: 1px solid var(--hairline-soft);
+    flex: none;
+  }
+  .sidepanel-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 22px;
+  }
+
+  .toast {
+    display: inline-flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 46px;
+    padding: 10px 22px 10px 16px;
+    border-radius: var(--r-pill);
+    background: rgba(28, 28, 30, 0.84);
+    backdrop-filter: var(--glass);
+    -webkit-backdrop-filter: var(--glass);
+    color: #fff;
+    font-size: 14px;
+    letter-spacing: -0.006em;
+    line-height: 1.4;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.24);
+    max-width: min(460px, 86vw);
+  }
+  .toast-dot {
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex: none;
+    background: var(--green);
+    color: #fff;
+  }
+  .toast-dot-bad {
+    background: var(--red);
+  }
+  .toast-dot-info {
+    background: var(--blue);
+  }
+
+  .menu {
+    width: 268px;
+    padding: 6px;
+    border-radius: var(--r-fld);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: var(--glass);
+    -webkit-backdrop-filter: var(--glass);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  }
+  .menu-head {
+    padding: 10px 12px 12px;
+    border-bottom: 1px solid var(--hairline-soft);
+    margin-bottom: 5px;
+  }
+  .menu button {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    height: 34px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: var(--r-hair);
+    background: none;
+    font-size: 14px;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .menu button > svg {
+    color: var(--ink-3);
+    flex: none;
+  }
+  .menu button:hover {
+    background: var(--blue);
+    color: #fff;
+  }
+  .menu button:hover > svg {
+    color: #fff;
+  }
+  .menu button.danger,
+  .menu button.danger > svg {
+    color: var(--red);
+  }
+  .menu button.danger:hover,
+  .menu button.danger:hover > svg {
+    background: var(--red);
+    color: #fff;
+  }
+
+  /* ── 16 · Pager (ReactPaginate) ──────────────────────────────────────── */
+  .pager {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .pager-link {
+    display: grid;
+    place-items: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 9px;
+    border-radius: var(--r-pill);
+    font-size: 14px;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .pager-link:hover {
+    background: var(--haze);
+    color: var(--ink);
+  }
+  .pager-active .pager-link {
+    background: var(--ink);
+    color: var(--paper);
+    font-weight: 500;
+  }
+  .pager-break .pager-link {
+    color: var(--ink-4);
+    cursor: default;
+  }
+  .pager-break .pager-link:hover {
+    background: none;
+  }
+  .pager-disabled .pager-link {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
+  /* ── 17 · Footer ─────────────────────────────────────────────────────── */
+  /* The closing haze band. `margin-top: auto` inside each page's
+     min-h-screen column keeps it on the bottom edge even when the page is
+     short, and the hairline keeps it legible as a footer when the section
+     directly above it is also haze — as it is on the product page. */
+  .foot {
+    background: var(--haze);
+    border-top: 1px solid var(--hairline);
+    font-size: 12px;
+    color: var(--ink-2);
+    margin-top: auto;
+  }
+  /* Even thirds across the full page width, so the band reads as part of
+     the same grid as the header and the product listing rather than a
+     narrow block floating in the middle of the screen. */
+  /* A strip, not a section — just enough room to clear the type. */
+  .foot-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding: 12px 0 14px;
+  }
+  @media (min-width: 768px) {
+    .foot-cols {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 32px;
+    }
+  }
+  .foot-cols h5 {
+    margin-bottom: 4px;
+  }
+  .foot-cols a:not(.foot-mark) {
+    padding: 1px 0;
+  }
+  .foot-cols h5 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  /* :not(.foot-mark) matters — `.foot-cols a` is specificity 0,1,1 and so
+     outranks Tailwind's `.inline-flex` (0,1,0), which would otherwise turn
+     the brand lockup into a stacked block. */
+  .foot-cols a:not(.foot-mark) {
+    display: block;
+    color: var(--ink-2);
+    text-decoration: none;
+    padding: 4px 0;
+  }
+  .foot-cols a:not(.foot-mark):hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+
+  /* ── 18 · Empty and loading ──────────────────────────────────────────── */
+  .empty {
+    text-align: center;
+    padding: 64px 20px;
+    max-width: 460px;
+    margin: 0 auto;
+  }
+  @media (min-width: 768px) {
+    .empty {
+      padding: 80px 20px;
+    }
+  }
+  .empty .glyph {
+    color: var(--ink-4);
+    display: block;
+    margin: 0 auto 18px;
+  }
+
+  /* Hairline track, accent-blue arc. The circumference of r=18 is ~113,
+     so a 28-unit dash shows a quarter of the ring. */
+  .spinner {
+    display: block;
+    animation: spinRing 900ms linear infinite;
+  }
+  .spinner circle {
+    fill: none;
+    stroke-width: 3.5;
+  }
+  .spinner-track {
+    stroke: var(--hairline);
+  }
+  .spinner-arc {
+    stroke: var(--blue);
+    stroke-linecap: round;
+    stroke-dasharray: 113;
+    stroke-dashoffset: 85;
+  }
+  @keyframes spinRing {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  /* With motion reduced the ring cannot turn, so show the full track and
+     let the accompanying text carry the "busy" message. */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner-arc {
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
+      opacity: 0.45;
+    }
+  }
+
+  .skel {
+    background: var(--haze);
+    border-radius: var(--r-ctl);
+    position: relative;
+    overflow: hidden;
+  }
+  @keyframes sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  .skel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+    animation: sweep 1.4s infinite;
+  }
+
+  /* ── 19 · Auth page ──────────────────────────────────────────────────
+     AuthLayout redrawn as a single centred column. */
+  .authpage {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 44px 20px 40px;
+    background: var(--paper);
+  }
+  @media (min-width: 768px) {
+    .authpage {
+      padding: 64px 22px 48px;
+    }
+  }
+  .authpage-dark {
+    background: #000;
+    color: #f5f5f7;
+  }
+  .authpage-dark h1 {
+    color: #f5f5f7;
+  }
+  /* #0066cc is unreadable on black, so links inside the dark auth page take
+     the brighter system blue. Saves every dark screen overriding it. */
+  .authpage-dark .link {
+    color: #2997ff;
+  }
+  .authcol {
+    width: 100%;
+    max-width: 384px;
+  }
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--ink-3);
+    font-size: 12px;
+  }
+  .auth-divider::before,
+  .auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
   }
 }

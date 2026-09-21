@@ -71,6 +71,7 @@ services:
       MONGO_CONN: mongodb://mongo:27017/amazon
       AUTH_SERVER_URL: http://authserver:5000
       TT_GATEWAY_URL: http://gateway:7000
+      TT_GATEWAY_PUBLIC_URL: http://localhost:7000
       CORS_ORIGINS: http://localhost:3001,http://localhost:8000
     depends_on:
       mongo:
@@ -89,6 +90,7 @@ services:
       MONGO_CONN: mongodb://mongo:27017/walmart
       AUTH_SERVER_URL: http://authserver:5000
       TT_GATEWAY_URL: http://gateway:7000
+      TT_GATEWAY_PUBLIC_URL: http://localhost:7000
       CORS_ORIGINS: http://localhost:3001,http://localhost:8001,http://127.0.0.1:8001
     depends_on:
       mongo:
