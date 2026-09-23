@@ -128,6 +128,7 @@ flowchart TB
     Atlas[("MongoDB Atlas")]
     Secrets["Google Secret Manager"]
     Actions["GitHub Actions<br/>6-hour snapshots"]
+    Stripe["Stripe<br/>card payments"]
 
     Storefront --> Gateway
     AuthClient --> Auth
@@ -154,10 +155,13 @@ flowchart TB
     Secrets -.-> Walmart
 
     Actions --> Gateway
+
+    Storefront -.->|checkout redirect| Amazon
+    Storefront -.->|checkout redirect| Walmart
+    Amazon --> Stripe
+    Walmart --> Stripe
+
 ```
-
-The gateway and Users share the storefront database because the gateway reads provider credentials, price snapshots and alerts. Auth, Amazon and Walmart keep their own databases.
-
 ## Technology Stack
 
 | Area | Technology |
