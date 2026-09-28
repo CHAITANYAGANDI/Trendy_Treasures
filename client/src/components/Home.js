@@ -15,7 +15,9 @@ import SiteFooter from './SiteFooter';
 import ProductCard from './ui/ProductCard';
 import { Segmented, Select, Skeleton, EmptyState } from './ui/Primitives';
 
-const ITEMS_PER_PAGE = 12;
+// 15 fills whole rows in the 5-column (≥1280px) and 3-column grids, so the
+// last row of a page isn't left with a couple of stragglers.
+const ITEMS_PER_PAGE = 15;
 
 // Render's free tier spins idle services down, so the first request after a
 // quiet period can 502/503 or simply hang while the container wakes. Bound
@@ -336,7 +338,7 @@ function Home() {
         <div className="mt-8">
           {loading ? (
             <div className="grid-tiles" aria-busy="true" aria-label="Loading products">
-              {Array.from({ length: 8 }).map((_, i) => (
+              {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
                 <div key={i} className="flex flex-col pb-4">
                   <Skeleton className="aspect-square !rounded-tile" />
                   <Skeleton className="h-3.5 w-3/4 mt-4" />
