@@ -1403,6 +1403,12 @@
     background: var(--haze);
     color: var(--ink);
   }
+  /* Room for the trailing control so long values — client secrets
+     especially — end before the eye instead of running under it:
+     8px inset + 32px button + 8px gap. */
+  .field-has-trailing > input {
+    padding-right: 48px;
+  }
 
   /* Dark appearance, used by the admin sign-in page. The change of
      appearance is itself the signal that this is the operations side. */

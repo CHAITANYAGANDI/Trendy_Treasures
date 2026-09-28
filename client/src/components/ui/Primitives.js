@@ -127,6 +127,7 @@ export function Field({
                     'field',
                     filled ? 'field-filled' : '',
                     error ? 'field-error' : '',
+                    trailing ? 'field-has-trailing' : '',
                     className,
                 ]
                     .filter(Boolean)
