@@ -52,8 +52,6 @@ body {
 }
 
 .amz-logo-text { color: #fff; }
-.amz-logo-dot { color: var(--amz-orange); }
-.amz-logo-tld { color: #fff; font-size: 16px; }
 
 .amz-secure {
     color: var(--amz-orange);
