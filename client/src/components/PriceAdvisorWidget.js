@@ -2,18 +2,44 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { fetchPriceAdvice, apiErrorMessage } from '../utils';
 
-// 1st / 2nd / 3rd / 4th. The value itself is unchanged — this only picks
-// the suffix, so a 21st-percentile price no longer reads "21th".
-const ordinal = (n) => {
-    const value = Number(n);
-    if (!Number.isFinite(value)) return `${n}th`;
-    const mod100 = Math.abs(value) % 100;
-    if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
-    const mod10 = Math.abs(value) % 10;
-    if (mod10 === 1) return `${value}st`;
-    if (mod10 === 2) return `${value}nd`;
-    if (mod10 === 3) return `${value}rd`;
-    return `${value}th`;
+const shortDate = (d) => {
+    const date = new Date(d);
+    return Number.isNaN(date.getTime())
+        ? null
+        : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+};
+
+// The server's stats in words a shopper would use — "close to the lowest
+// price we've seen" rather than "the 18th percentile of the 30d range".
+// Returns [{ strong, rest }] phrases, or null when there's too little
+// history to describe (the advice sentence already says so).
+export const describePriceStats = (stats) => {
+    if (!stats || !(stats.sampleCount >= 3)) return null;
+
+    const date = shortDate(stats.firstSnapshotAt);
+    const since = date ? ` since ${date}` : ' in the last 30 days';
+
+    // A price that never moved used to read "0th percentile", which sounds
+    // like "cheapest" when it really means "unchanged".
+    if (stats.max === stats.min) {
+        return [{ strong: 'No price change', rest: since }];
+    }
+
+    const seen = " we've seen in the last 30 days";
+    let position;
+    if (stats.current <= stats.min) position = { strong: 'Lowest price', rest: seen };
+    else if (stats.current >= stats.max) position = { strong: 'Highest price', rest: seen };
+    else if (stats.percentile <= 25) position = { strong: 'Close to the lowest price', rest: seen };
+    else if (stats.percentile >= 75) position = { strong: 'Close to the highest price', rest: seen };
+    else position = { strong: 'About the usual price', rest: ' for the last 30 days' };
+
+    const pct = stats.trend30dPct;
+    const change =
+        pct === 0
+            ? { strong: 'Same price', rest: date ? ` as on ${date}` : ' as 30 days ago' }
+            : { strong: `${pct < 0 ? 'Down' : 'Up'} ${Math.abs(pct)}%`, rest: since };
+
+    return [position, change];
 };
 
 // Compact "buy now or wait?" panel that sits beneath the price history
@@ -66,6 +92,8 @@ function PriceAdvisorWidget({ provider, productId, bare = false, onUnavailable }
 
     if (state.disabled) return null;
 
+    const phrases = describePriceStats(state.stats);
+
     // `bare` drops the bordered card and its luminous rule, for when the
     // surface around it already carries both.
     return (
@@ -76,28 +104,27 @@ function PriceAdvisorWidget({ provider, productId, bare = false, onUnavailable }
                 </span>
                 <div>
                     <h3 className="ai-title">AI price advisor</h3>
-                    <p className="ai-sub">Based on the last 30 days of snapshots</p>
+                    <p className="ai-sub">Based on this item's prices over the last 30 days</p>
                 </div>
             </header>
 
             <div className="mt-5">
                 {state.loading ? (
-                    <p className="ai-shimmer">Analyzing price history…</p>
+                    <p className="ai-shimmer">Checking recent prices…</p>
                 ) : state.error ? (
                     <p className="t-ui dim">{state.error}</p>
                 ) : (
                     <>
                         <p className="ai-verdict">{state.advice}</p>
-                        {state.stats && (
+                        {phrases && (
                             <p className="ai-stat mt-4">
-                                Current is at the{' '}
-                                <b>{ordinal(state.stats.percentile)} percentile</b> of the 30d
-                                range {' · '}
-                                <b>
-                                    {state.stats.trend30dPct >= 0 ? '+' : ''}
-                                    {state.stats.trend30dPct}%
-                                </b>{' '}
-                                in 30d
+                                {phrases.map((phrase, i) => (
+                                    <React.Fragment key={phrase.strong}>
+                                        {i > 0 && ' · '}
+                                        <b>{phrase.strong}</b>
+                                        {phrase.rest}
+                                    </React.Fragment>
+                                ))}
                             </p>
                         )}
                     </>

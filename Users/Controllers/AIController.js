@@ -49,6 +49,42 @@ const summarizeHistory = (snapshots) => {
     };
 };
 
+// "Sep 3" — fixed locale and UTC so the prompt doesn't depend on where the
+// server happens to run.
+const shortDate = (d) =>
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+// The stats restated the way a shopper would say them. The model mirrors
+// the vocabulary it's given, so feeding it "percentile" and "30d" got
+// those words straight back into customer-facing advice.
+const describeForShopper = (stats) => {
+    const since = shortDate(stats.firstSnapshotAt);
+    if (stats.max === stats.min) {
+        return [`- The price has not changed since we started watching it on ${since}.`];
+    }
+
+    let position;
+    if (stats.current <= stats.min) position = 'the lowest price we have seen';
+    else if (stats.current >= stats.max) position = 'the highest price we have seen';
+    else if (stats.percentile <= 25) position = 'close to the lowest price we have seen';
+    else if (stats.percentile >= 75) position = 'close to the highest price we have seen';
+    else position = 'about the usual price';
+
+    const pct = stats.trend30dPct;
+    const change = pct === 0
+        ? `about the same as when we started watching it on ${since}`
+        : `${pct < 0 ? 'down' : 'up'} ${Math.abs(pct)}% since we started watching it on ${since}`;
+
+    return [`- Today's price is ${position}.`, `- It is ${change}.`];
+};
+
+// Shown instead of calling the model when there's too little history to
+// say anything useful.
+const tooEarlyAdvice = (stats) => {
+    const soFar = stats ? ` — it's $${stats.current.toFixed(2)} so far` : '';
+    return `We've only just started watching this price${soFar}. Check back in a few days and we'll tell you whether it's a good time to buy.`;
+};
+
 
 // GET /ai/price-advice/:provider/:productId
 // Reads the last 30 days of price_snapshots, asks the model for a brief
@@ -76,7 +112,7 @@ const priceAdvice = async (req, res) => {
         if (snapshots.length === 0) {
             return res.status(200).json({
                 success: true,
-                advice: "Not enough price history yet to make a recommendation. Check back after a few more days of tracking.",
+                advice: tooEarlyAdvice(null),
                 stats: null,
                 cached: false
             });
@@ -86,29 +122,29 @@ const priceAdvice = async (req, res) => {
 
         // Fewer than 3 snapshots = no real trend. Skip the model call,
         // return a fixed message — we'd just be paying OpenAI to say
-        // "not enough data" in different words.
+        // "check back later" in different words.
         if (stats.sampleCount < 3) {
-            const advice = `Only ${stats.sampleCount} price snapshot${stats.sampleCount === 1 ? '' : 's'} so far at $${stats.current.toFixed(2)}. We need a few more data points before we can give a buy/wait recommendation.`;
+            const advice = tooEarlyAdvice(stats);
             priceAdviceCache.set(cacheKey, { advice, stats, fetchedAt: Date.now() });
             return res.status(200).json({ success: true, advice, stats, cached: false });
         }
 
         const system = [
-            'You are a concise shopping advisor. Given price history statistics for a single product,',
-            'tell the buyer in 1–2 sentences whether NOW is a good time to buy or if they should wait.',
-            'Refer to numbers from the stats. Do not use hedging phrases like "based on the data".',
-            'Do not use emojis. Do not greet the user. Output is rendered as plain text in a small UI panel.'
+            'You are a friendly shopping helper talking to an everyday shopper, not an analyst.',
+            'In 1–2 short sentences, tell them whether now is a good time to buy this product or whether waiting could get them a better price.',
+            'Use plain, everyday words. Never use statistical or technical terms such as percentile, median, mean, snapshot, data point, sample, range or trend,',
+            'and never abbreviate time periods — write "the last 30 days", not "30d".',
+            'You may mention a price or two in dollars and a simple change like "down 12%".',
+            'Do not say "based on the data", do not use emojis, and do not greet the user. Output is shown as plain text in a small panel.'
         ].join(' ');
 
         const user = [
-            `Stats over the last 30 days (${stats.sampleCount} snapshots):`,
-            `- Current price: $${stats.current.toFixed(2)}`,
-            `- 30d low: $${stats.min.toFixed(2)}`,
-            `- 30d high: $${stats.max.toFixed(2)}`,
-            `- Median: $${stats.median.toFixed(2)}`,
-            `- Mean: $${stats.mean.toFixed(2)}`,
-            `- Current is at the ${stats.percentile}th percentile of the 30d range (0=cheapest, 100=most expensive).`,
-            `- 30d trend: ${stats.trend30dPct >= 0 ? '+' : ''}${stats.trend30dPct}%`
+            'What we have seen for this product over the last 30 days:',
+            `- Price today: $${stats.current.toFixed(2)}`,
+            `- Lowest price: $${stats.min.toFixed(2)}`,
+            `- Highest price: $${stats.max.toFixed(2)}`,
+            `- Usual price: $${stats.median.toFixed(2)}`,
+            ...describeForShopper(stats)
         ].join('\n');
 
         const result = await callOpenAI({ system, user, maxTokens: 80, temperature: 0.2 });
