@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Search, Bell, LogOut, Trash2, LogIn, User, ChevronDown } from 'lucide-react';
+import { ShoppingBag, Search, Bell, LogOut, Trash2, User, ChevronDown } from 'lucide-react';
 import { handleCartClick, handleError, handleSuccess, apiFetch, logoutUser, showConfirm } from '../utils';
 import BrandMark from './BrandMark';
 
@@ -129,78 +129,69 @@ function SiteHeader({
             )}
           </button>
 
-          <div className="relative" ref={dropdownRef}>
-            <button
-              type="button"
-              onClick={() => setShowDropdown((v) => !v)}
-              className="nav-account"
-              aria-haspopup="menu"
-              aria-expanded={showDropdown}
-              aria-label={currentUser ? 'Account menu' : 'Sign in'}
-            >
-              {currentUser ? (
+          {/* Signed out, there's nothing to choose between — a menu whose only
+              item repeated the button's own label was a wasted click. So it's
+              a plain link to the sign-in page, and the dropdown only exists
+              once there's an account to manage. */}
+          {!currentUser ? (
+            <Link to="/login" className="nav-account" aria-label="Sign in">
+              <User size={19} className="dim" aria-hidden="true" />
+              <span className="hidden lg:inline t-ui font-medium">Sign in</span>
+            </Link>
+          ) : (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowDropdown((v) => !v)}
+                className="nav-account"
+                aria-haspopup="menu"
+                aria-expanded={showDropdown}
+                aria-label="Account menu"
+              >
                 <span className="nav-initial" aria-hidden="true">{initial}</span>
-              ) : (
-                <User size={19} className="dim" aria-hidden="true" />
-              )}
-              <span className="hidden lg:inline t-ui font-medium max-w-[120px] truncate">
-                {currentUser ? currentUser.name : 'Sign in'}
-              </span>
-              <ChevronDown size={13} className="dimmer hidden lg:block" aria-hidden="true" />
-            </button>
+                <span className="hidden lg:inline t-ui font-medium max-w-[120px] truncate">
+                  {currentUser.name}
+                </span>
+                <ChevronDown size={13} className="dimmer hidden lg:block" aria-hidden="true" />
+              </button>
 
-            {showDropdown && (
-              <div className="menu absolute right-0 top-[46px] z-[95] animate-popIn" role="menu">
-                {currentUser ? (
-                  <>
-                    <div className="menu-head">
-                      <p className="t-ui font-medium truncate">{currentUser.name}</p>
-                      <p className="text-cap dimmer truncate mt-0.5">{currentUser.email}</p>
-                    </div>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setShowDropdown(false);
-                        navigate('/alerts');
-                      }}
-                    >
-                      <Bell size={16} aria-hidden="true" />
-                      Price alerts
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="danger"
-                      onClick={handleDeleteAccount}
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                      Delete account
-                    </button>
-                    {/* Log out sits last — it is the item people reach for
-                        most, and the one that should be furthest from the
-                        destructive action above it. */}
-                    <button type="button" role="menuitem" onClick={handleLogout}>
-                      <LogOut size={16} aria-hidden="true" />
-                      Log out
-                    </button>
-                  </>
-                ) : (
+              {showDropdown && (
+                <div className="menu absolute right-0 top-[46px] z-[95] animate-popIn" role="menu">
+                  <div className="menu-head">
+                    <p className="t-ui font-medium truncate">{currentUser.name}</p>
+                    <p className="text-cap dimmer truncate mt-0.5">{currentUser.email}</p>
+                  </div>
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => {
                       setShowDropdown(false);
-                      navigate('/login');
+                      navigate('/alerts');
                     }}
                   >
-                    <LogIn size={16} aria-hidden="true" />
-                    Sign in
+                    <Bell size={16} aria-hidden="true" />
+                    Price alerts
                   </button>
-                )}
-              </div>
-            )}
-          </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="danger"
+                    onClick={handleDeleteAccount}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    Delete account
+                  </button>
+                  {/* Log out sits last — it is the item people reach for
+                      most, and the one that should be furthest from the
+                      destructive action above it. */}
+                  <button type="button" role="menuitem" onClick={handleLogout}>
+                    <LogOut size={16} aria-hidden="true" />
+                    Log out
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
