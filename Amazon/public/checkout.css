@@ -19,6 +19,13 @@ body {
     font-family: "Amazon Ember", Arial, sans-serif;
     background: var(--amz-bg);
     color: var(--amz-text);
+    /* Full-height column: on short pages (order confirmation, checkout
+       errors) the footer sits at the bottom of the window instead of
+       directly under the content. dvh ignores mobile browser toolbars. */
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
 }
 
 .amz-header {
@@ -60,6 +67,11 @@ body {
     max-width: 1100px;
     margin: 24px auto;
     padding: 0 20px;
+    /* Grows to fill the column, pushing the footer down. width:100% keeps
+       it at max-width — auto side margins alone would shrink a flex item
+       to its content. */
+    width: 100%;
+    flex: 1 0 auto;
 }
 
 .amz-page-title {
