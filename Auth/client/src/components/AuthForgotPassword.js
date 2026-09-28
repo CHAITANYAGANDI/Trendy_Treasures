@@ -10,10 +10,112 @@ import {
 
 const ACCENT = '#426fe7';
 
+const LABEL_CLASS =
+    'block w-full pl-0 ml-0 text-left font-headline font-medium text-sm text-[#0b1c30] mb-1.5';
+const INPUT_CLASS =
+    'block w-full py-2.5 border border-[#dce9ff] rounded bg-[#f8f9ff] text-[#0b1c30] sm:text-sm font-body focus:outline-none focus:ring-2 focus:ring-[#426fe7] focus:border-[#426fe7] transition-shadow';
+const PRIMARY_BUTTON_CLASS =
+    'w-full flex justify-center items-center py-3 px-4 border border-transparent rounded shadow-sm text-base font-headline font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed';
+
+// request → verify → reset. The new-password fields only appear once the
+// server has accepted the mailed code.
+const STEPS = {
+    request: {
+        title: 'Forgot password',
+        subtitle: () =>
+            "Enter the email tied to your AuthShield account and we'll send you a 6-digit reset code."
+    },
+    verify: {
+        title: 'Enter reset code',
+        subtitle: (email) => `We sent a 6-digit code to ${email}. Enter it below to continue.`
+    },
+    reset: {
+        title: 'Set a new password',
+        subtitle: (email) => `Choose a new password for ${email}.`
+    }
+};
+
+// Server codes that mean the mailed code is gone — the only way forward is
+// requesting a fresh one.
+const CODE_GONE_MESSAGE = {
+    OTP_EXPIRED: 'That code has expired. Request a new one below.',
+    OTP_LOCKED: 'Too many incorrect attempts. Request a new code below.'
+};
+
+const postJson = async (path, body) => {
+    const res = await fetch(`${AUTH_API_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+    });
+    const result = await res.json().catch(() => ({}));
+    return { ok: res.ok && result.success, result };
+};
+
+function Banner({ banner }) {
+    if (!banner) return null;
+    const success = banner.severity === 'success';
+    return (
+        <div
+            className="text-sm text-left rounded p-3 mb-5 flex items-start gap-2"
+            style={{
+                background: success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                color: success ? '#047857' : '#b91c1c',
+                border: `1px solid ${success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+            }}
+            role={success ? 'status' : 'alert'}
+        >
+            <span className="material-symbols-outlined text-base mt-px">
+                {success ? 'check_circle' : 'error'}
+            </span>
+            <span>{banner.message}</span>
+        </div>
+    );
+}
+
+function PasswordField({ id, label, value, onChange, show, onToggle, autoFocus, hint }) {
+    return (
+        <div>
+            <label className={LABEL_CLASS} htmlFor={id}>
+                {label}
+            </label>
+            <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="material-symbols-outlined text-[#5f5e5e] text-lg">lock</span>
+                </div>
+                <input
+                    id={id}
+                    type={show ? 'text' : 'password'}
+                    value={value}
+                    onChange={onChange}
+                    required
+                    autoFocus={autoFocus}
+                    autoComplete="new-password"
+                    className={`${INPUT_CLASS} pl-10 ${onToggle ? 'pr-10' : 'pr-3'}`}
+                />
+                {onToggle && (
+                    <button
+                        type="button"
+                        onClick={onToggle}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer bg-transparent border-0"
+                        aria-label={show ? 'Hide password' : 'Show password'}
+                    >
+                        <span className="material-symbols-outlined text-[#5f5e5e] text-lg">
+                            {show ? 'visibility' : 'visibility_off'}
+                        </span>
+                    </button>
+                )}
+            </div>
+            {hint}
+        </div>
+    );
+}
+
 function AuthForgotPassword() {
     const navigate = useNavigate();
 
-    const [step, setStep] = useState('request'); // 'request' | 'verify'
+    const [step, setStep] = useState('request');
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -56,28 +158,35 @@ function AuthForgotPassword() {
         };
     }, []);
 
+    const trimmedEmail = email.trim();
+
+    // Back to step 1 — used by "Use a different email" and whenever the code
+    // has expired or been locked.
+    const startOver = (nextBanner = null) => {
+        setStep('request');
+        setOtp('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setBanner(nextBanner);
+    };
+
     const handleRequestOtp = async (e) => {
         e.preventDefault();
-        if (!email.trim()) {
+        if (!trimmedEmail) {
             return handleError('Email is required');
         }
         setSubmitting(true);
         setBanner(null);
         try {
-            const res = await fetch(`${AUTH_API_BASE}/forgot-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ email: email.trim() })
-            });
-            const result = await res.json().catch(() => ({}));
-            if (res.ok && result.success) {
+            const { ok, result } = await postJson('/forgot-password', { email: trimmedEmail });
+            if (ok) {
+                setOtp('');
+                setStep('verify');
                 setBanner({
                     severity: 'success',
                     message:
-                        'If an account exists for that email, a 6-digit reset code has been sent. Check your inbox (and spam) and enter it below.'
+                        'If an account exists for that email, a 6-digit code is on its way. Check your inbox (and spam).'
                 });
-                setStep('verify');
                 handleSuccess('Reset code sent');
             } else {
                 setBanner({
@@ -92,46 +201,23 @@ function AuthForgotPassword() {
         }
     };
 
-    const handleResetPassword = async (e) => {
+    const handleVerifyOtp = async (e) => {
         e.preventDefault();
-        if (!otp.trim() || !newPassword || !confirmNewPassword) {
-            return handleError('All fields are required');
-        }
-        if (newPassword !== confirmNewPassword) {
-            return setBanner({ severity: 'error', message: 'Passwords do not match.' });
-        }
-        if (!isStrongPassword(newPassword)) {
-            return setBanner({
-                severity: 'error',
-                message: STRONG_PASSWORD_MESSAGE
-            });
+        if (!/^\d{6}$/.test(otp)) {
+            return setBanner({ severity: 'error', message: 'Enter the 6-digit code from your email.' });
         }
         setSubmitting(true);
         setBanner(null);
         try {
-            const res = await fetch(`${AUTH_API_BASE}/reset-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    email: email.trim(),
-                    otp: Number(otp.trim()),
-                    newPassword
-                })
-            });
-            const result = await res.json().catch(() => ({}));
-            if (res.ok && result.success) {
-                setBanner({
-                    severity: 'success',
-                    message: 'Password reset. Redirecting to sign in…'
-                });
-                handleSuccess('Password reset');
-                setTimeout(() => navigate('/auth/login'), 900);
+            const { ok, result } = await postJson('/verify-reset-code', { email: trimmedEmail, otp });
+            if (ok) {
+                setStep('reset');
+                setBanner({ severity: 'success', message: 'Code verified.' });
+            } else if (CODE_GONE_MESSAGE[result.code]) {
+                startOver({ severity: 'error', message: CODE_GONE_MESSAGE[result.code] });
             } else {
-                setBanner({
-                    severity: 'error',
-                    message: result.message || 'Could not reset password.'
-                });
+                setOtp('');
+                setBanner({ severity: 'error', message: result.message || 'Could not verify the code.' });
             }
         } catch (err) {
             setBanner({ severity: 'error', message: err.message });
@@ -139,6 +225,67 @@ function AuthForgotPassword() {
             setSubmitting(false);
         }
     };
+
+    const handleResetPassword = async (e) => {
+        e.preventDefault();
+        if (!newPassword || !confirmNewPassword) {
+            return setBanner({ severity: 'error', message: 'Enter and confirm your new password.' });
+        }
+        if (newPassword !== confirmNewPassword) {
+            return setBanner({ severity: 'error', message: 'Passwords do not match.' });
+        }
+        if (!isStrongPassword(newPassword)) {
+            return setBanner({ severity: 'error', message: STRONG_PASSWORD_MESSAGE });
+        }
+        setSubmitting(true);
+        setBanner(null);
+        try {
+            const { ok, result } = await postJson('/reset-password', {
+                email: trimmedEmail,
+                otp,
+                newPassword
+            });
+            if (ok) {
+                handleSuccess('Password reset');
+                navigate('/auth/login', {
+                    replace: true,
+                    state: {
+                        identifier: trimmedEmail,
+                        notice: 'Password reset. Sign in with your email or username and your new password.'
+                    }
+                });
+                return;
+            }
+            if (CODE_GONE_MESSAGE[result.code]) {
+                startOver({
+                    severity: 'error',
+                    message:
+                        result.code === 'OTP_EXPIRED'
+                            ? 'Your code expired before the password was saved. Request a new one below.'
+                            : CODE_GONE_MESSAGE[result.code]
+                });
+            } else {
+                setBanner({ severity: 'error', message: result.message || 'Could not reset password.' });
+            }
+        } catch (err) {
+            setBanner({ severity: 'error', message: err.message });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const passwordsMismatch = confirmNewPassword.length > 0 && newPassword !== confirmNewPassword;
+
+    const useDifferentEmail = (
+        <button
+            type="button"
+            onClick={() => startOver()}
+            className="text-xs font-medium underline bg-transparent border-0 cursor-pointer"
+            style={{ color: '#5f5e5e' }}
+        >
+            Use a different email
+        </button>
+    );
 
     return (
         <div className="font-body antialiased min-h-screen w-full flex items-center justify-center bg-[#f8f9ff] text-[#0b1c30] p-6">
@@ -161,37 +308,19 @@ function AuthForgotPassword() {
                 >
                     <div className="text-center mb-8">
                         <h2 className="font-headline font-bold text-3xl text-[#0b1c30] mb-2 text-center">
-                            {step === 'request' ? 'Forgot password' : 'Reset password'}
+                            {STEPS[step].title}
                         </h2>
                         <p className="font-body text-sm text-[#5f5e5e] text-center">
-                            {step === 'request'
-                                ? "Enter the email tied to your AuthShield account and we'll send you a 6-digit reset code."
-                                : `We sent a 6-digit code to ${email}. Enter it below along with your new password.`}
+                            {STEPS[step].subtitle(trimmedEmail)}
                         </p>
                     </div>
 
-                    {banner && (
-                        <div
-                            className="text-sm rounded p-3 mb-5"
-                            style={{
-                                background:
-                                    banner.severity === 'success'
-                                        ? 'rgba(16, 185, 129, 0.12)'
-                                        : 'rgba(239, 68, 68, 0.12)',
-                                color: banner.severity === 'success' ? '#047857' : '#b91c1c'
-                            }}
-                        >
-                            {banner.message}
-                        </div>
-                    )}
+                    <Banner banner={banner} />
 
-                    {step === 'request' ? (
+                    {step === 'request' && (
                         <form onSubmit={handleRequestOtp} className="space-y-5">
                             <div>
-                                <label
-                                    className="block w-full pl-0 ml-0 text-left font-headline font-medium text-sm text-[#0b1c30] mb-1.5"
-                                    htmlFor="email"
-                                >
+                                <label className={LABEL_CLASS} htmlFor="email">
                                     Email
                                 </label>
                                 <div className="relative">
@@ -207,7 +336,7 @@ function AuthForgotPassword() {
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
                                         autoComplete="email"
-                                        className="block w-full pl-10 pr-3 py-2.5 border border-[#dce9ff] rounded bg-[#f8f9ff] text-[#0b1c30] sm:text-sm font-body focus:outline-none focus:ring-2 focus:ring-[#426fe7] focus:border-[#426fe7] transition-shadow"
+                                        className={`${INPUT_CLASS} pl-10 pr-3`}
                                     />
                                 </div>
                             </div>
@@ -215,20 +344,19 @@ function AuthForgotPassword() {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded shadow-sm text-base font-headline font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className={PRIMARY_BUTTON_CLASS}
                                     style={{ backgroundColor: ACCENT, color: '#ffffff' }}
                                 >
                                     {submitting ? 'Sending…' : 'Send reset code'}
                                 </button>
                             </div>
                         </form>
-                    ) : (
-                        <form onSubmit={handleResetPassword} className="space-y-5">
+                    )}
+
+                    {step === 'verify' && (
+                        <form onSubmit={handleVerifyOtp} className="space-y-5">
                             <div>
-                                <label
-                                    className="block w-full pl-0 ml-0 text-left font-headline font-medium text-sm text-[#0b1c30] mb-1.5"
-                                    htmlFor="otp"
-                                >
+                                <label className={LABEL_CLASS} htmlFor="otp">
                                     Reset code
                                 </label>
                                 <input
@@ -237,90 +365,67 @@ function AuthForgotPassword() {
                                     pattern="\d{6}"
                                     maxLength={6}
                                     value={otp}
-                                    onChange={(e) =>
-                                        setOtp(e.target.value.replace(/\D/g, ''))
-                                    }
+                                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                                     required
+                                    autoFocus
+                                    autoComplete="one-time-code"
                                     className="block w-full px-3 py-2.5 text-center tracking-[0.4em] font-mono text-lg border border-[#dce9ff] rounded bg-[#f8f9ff] text-[#0b1c30] focus:outline-none focus:ring-2 focus:ring-[#426fe7] focus:border-[#426fe7] transition-shadow"
                                 />
-                            </div>
-                            <div>
-                                <label
-                                    className="block w-full pl-0 ml-0 text-left font-headline font-medium text-sm text-[#0b1c30] mb-1.5"
-                                    htmlFor="newPassword"
-                                >
-                                    New password
-                                </label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="material-symbols-outlined text-[#5f5e5e] text-lg">
-                                            lock
-                                        </span>
-                                    </div>
-                                    <input
-                                        id="newPassword"
-                                        type={showPassword ? 'text' : 'password'}
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        required
-                                        className="block w-full pl-10 pr-10 py-2.5 border border-[#dce9ff] rounded bg-[#f8f9ff] text-[#0b1c30] sm:text-sm font-body focus:outline-none focus:ring-2 focus:ring-[#426fe7] focus:border-[#426fe7] transition-shadow"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword((v) => !v)}
-                                        className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer bg-transparent border-0"
-                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                    >
-                                        <span className="material-symbols-outlined text-[#5f5e5e] text-lg">
-                                            {showPassword ? 'visibility' : 'visibility_off'}
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div>
-                                <label
-                                    className="block w-full pl-0 ml-0 text-left font-headline font-medium text-sm text-[#0b1c30] mb-1.5"
-                                    htmlFor="confirmNewPassword"
-                                >
-                                    Confirm new password
-                                </label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="material-symbols-outlined text-[#5f5e5e] text-lg">
-                                            lock
-                                        </span>
-                                    </div>
-                                    <input
-                                        id="confirmNewPassword"
-                                        type={showPassword ? 'text' : 'password'}
-                                        value={confirmNewPassword}
-                                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                                        required
-                                        className="block w-full pl-10 pr-3 py-2.5 border border-[#dce9ff] rounded bg-[#f8f9ff] text-[#0b1c30] sm:text-sm font-body focus:outline-none focus:ring-2 focus:ring-[#426fe7] focus:border-[#426fe7] transition-shadow"
-                                    />
-                                </div>
                             </div>
                             <div className="pt-2 flex flex-col gap-2">
                                 <button
                                     type="submit"
+                                    disabled={submitting || otp.length !== 6}
+                                    className={PRIMARY_BUTTON_CLASS}
+                                    style={{ backgroundColor: ACCENT, color: '#ffffff' }}
+                                >
+                                    {submitting ? 'Verifying…' : 'Verify code'}
+                                </button>
+                                {useDifferentEmail}
+                            </div>
+                        </form>
+                    )}
+
+                    {step === 'reset' && (
+                        <form onSubmit={handleResetPassword} className="space-y-5">
+                            <PasswordField
+                                id="newPassword"
+                                label="New password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                show={showPassword}
+                                onToggle={() => setShowPassword((v) => !v)}
+                                autoFocus
+                                hint={
+                                    <p className="mt-1.5 text-left text-xs text-[#5f5e5e]">
+                                        {STRONG_PASSWORD_MESSAGE}
+                                    </p>
+                                }
+                            />
+                            <PasswordField
+                                id="confirmNewPassword"
+                                label="Confirm new password"
+                                value={confirmNewPassword}
+                                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                show={showPassword}
+                                hint={
+                                    passwordsMismatch && (
+                                        <p className="mt-1.5 text-left text-xs" style={{ color: '#b91c1c' }}>
+                                            Passwords do not match.
+                                        </p>
+                                    )
+                                }
+                            />
+                            <div className="pt-2 flex flex-col gap-2">
+                                <button
+                                    type="submit"
                                     disabled={submitting}
-                                    className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded shadow-sm text-base font-headline font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className={PRIMARY_BUTTON_CLASS}
                                     style={{ backgroundColor: ACCENT, color: '#ffffff' }}
                                 >
                                     {submitting ? 'Resetting…' : 'Reset password'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setStep('request');
-                                        setOtp('');
-                                        setBanner(null);
-                                    }}
-                                    className="text-xs font-medium underline bg-transparent border-0 cursor-pointer"
-                                    style={{ color: '#5f5e5e' }}
-                                >
-                                    Use a different email
-                                </button>
+                                {useDifferentEmail}
                             </div>
                         </form>
                     )}

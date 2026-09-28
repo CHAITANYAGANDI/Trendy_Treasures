@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const ClientModel = require('../Models/Client');
 const CredentialModel = require('../Models/Credential');
+const { loginLookupQuery } = require('../utils/loginIdentifier');
 
 const isProd = () => process.env.NODE_ENV === 'production';
 
@@ -60,7 +61,8 @@ const loginClients = async (req, res) => {
             return renderLogin(400, { error: 'Invalid input', callbackUrl: bodyCallbackUrl || null });
         }
 
-        const client = await ClientModel.findOne({ username });
+        // `username` may also be the account email — see loginIdentifier.js.
+        const client = await ClientModel.findOne(loginLookupQuery(username));
         if (!client) {
             return renderLogin(403, { error: 'Invalid credentials', callbackUrl: bodyCallbackUrl || null });
         }
@@ -101,8 +103,11 @@ const loginClients = async (req, res) => {
             return renderLogin(400, { error: 'No callback URL configured', callbackUrl: null });
         }
 
+        // Always the stored username, never what was typed: /auth/authorize
+        // looks the owner up by exact username, so an email (or stray
+        // whitespace) here would pass sign-in and then fail authorization.
         const callbackUrl = appendQuery(baseUrl, {
-            username,
+            username: client.username,
             client_id: clientId
         });
 

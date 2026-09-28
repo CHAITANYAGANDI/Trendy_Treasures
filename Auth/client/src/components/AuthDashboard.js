@@ -7,6 +7,7 @@ import {
     authFetch,
     fetchCurrentClient
 } from '../utils';
+import MaskedSecret from './MaskedSecret';
 
 const ACCENT = '#426fe7';
 const BG = '#11131b';
@@ -833,6 +834,7 @@ function CreateCredentialModal({ onClose, onSuccess }) {
                                     value={created.client_secret}
                                     onCopy={() => copy(created.client_secret, 'Client Secret')}
                                     danger
+                                    masked
                                 />
                             </div>
 
@@ -859,7 +861,12 @@ function CreateCredentialModal({ onClose, onSuccess }) {
     );
 }
 
-function RevealField({ label, value, onCopy, danger }) {
+function RevealField({ label, value, onCopy, danger, masked }) {
+    const boxStyle = {
+        background: 'rgba(11,13,27,0.6)',
+        color: TEXT,
+        border: `1px solid ${danger ? 'rgba(239,68,68,0.4)' : BORDER}`
+    };
     return (
         <div>
             <div className="flex items-center justify-between mb-2">
@@ -881,16 +888,13 @@ function RevealField({ label, value, onCopy, danger }) {
                     Copy
                 </button>
             </div>
-            <div
-                className="p-3 rounded font-mono text-xs break-all"
-                style={{
-                    background: 'rgba(11,13,27,0.6)',
-                    color: TEXT,
-                    border: `1px solid ${danger ? 'rgba(239,68,68,0.4)' : BORDER}`
-                }}
-            >
-                {value}
-            </div>
+            {masked ? (
+                <MaskedSecret value={value} label={label} style={boxStyle} />
+            ) : (
+                <div className="p-3 rounded font-mono text-xs break-all" style={boxStyle}>
+                    {value}
+                </div>
+            )}
         </div>
     );
 }

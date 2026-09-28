@@ -62,6 +62,18 @@ const resetPasswordLimiter = rateLimit({
     message: { success: false, message: 'Too many reset attempts. Try again later.' }
 });
 
+// /verify-reset-code — the Otp record's 5-attempt counter (shared with
+// /reset-password) is the real brute-force guard; this caps request volume
+// per host + address the same way resetPasswordLimiter does.
+const verifyResetCodeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: ipAndBodyKey('email'),
+    message: { success: false, message: 'Too many verification attempts. Try again later.' }
+});
+
 const registerLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     max: 20,
@@ -99,6 +111,7 @@ module.exports = {
     loginLimiter,
     forgotPasswordLimiter,
     resetPasswordLimiter,
+    verifyResetCodeLimiter,
     registerLimiter,
     registerVerifyLimiter,
     refreshLimiter

@@ -13,7 +13,7 @@ const updateUsername = require('../Services/UpdateUsernameService');
 const updatePassword = require('../Services/UpdatePasswordService');
 const deleteAccount = require('../Services/DeleteAccountService');
 const forgotPassword = require('../Controllers/ForgotPasswordController');
-const resetPassword = require('../Controllers/ResetPasswordController');
+const { verifyResetCode, resetPassword } = require('../Controllers/ResetPasswordController');
 const { signupValidation, loginvalidation } = require('../Middlewares/clientCredsValidation');
 const verifyToken = require("../Middlewares/verifyToken");
 const renderLoginPage = require('../Controllers/OAuthLoginPageController');
@@ -30,6 +30,7 @@ const {
     loginLimiter,
     forgotPasswordLimiter,
     resetPasswordLimiter,
+    verifyResetCodeLimiter,
     registerLimiter,
     registerVerifyLimiter,
     refreshLimiter
@@ -42,6 +43,11 @@ router.get('/client/login', renderLoginPage);
 router.post('/login', loginLimiter, loginvalidation, login);
 
 router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
+
+// Three-step reset: /forgot-password mails a code, /verify-reset-code proves
+// it before the SPA asks for a new password, /reset-password re-checks the
+// same code and sets the password. Both checks share one attempt counter.
+router.post('/verify-reset-code', verifyResetCodeLimiter, verifyResetCode);
 
 router.post('/reset-password', resetPasswordLimiter, resetPassword);
 

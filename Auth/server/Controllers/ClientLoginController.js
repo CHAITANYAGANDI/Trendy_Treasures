@@ -8,6 +8,7 @@ const {
     REFRESH_TOKEN_TTL_MS
 } = require('../utils/tokens');
 const { issueCsrfToken } = require('../Middlewares/csrf');
+const { loginLookupQuery } = require('../utils/loginIdentifier');
 
 
 const login = async (req, res) => {
@@ -16,7 +17,8 @@ const login = async (req, res) => {
 
         const { username, password } = req.body;
 
-        const client = await ClientModel.findOne({ username });
+        // `username` may also be the account email — see loginIdentifier.js.
+        const client = await ClientModel.findOne(loginLookupQuery(username));
 
         const errorMessage = 'Invalid Credentials';
 

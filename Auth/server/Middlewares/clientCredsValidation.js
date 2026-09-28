@@ -41,7 +41,9 @@ const signupValidation = (req,res,next)=> {
 
 const loginvalidation = (req,res,next)=> {
     const schema = joi.object({
-        username: joi.string().min(4).max(100).required(),
+        // min 3 matches signup's username policy — at 4, three-character
+        // usernames could register but never sign in. Emails fit too.
+        username: joi.string().min(3).max(100).required(),
         password: joi.string().min(4).max(100).required()
 
     });

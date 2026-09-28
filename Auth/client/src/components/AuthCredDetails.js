@@ -7,6 +7,7 @@ import {
     authFetch,
     fetchCurrentClient
 } from '../utils';
+import MaskedSecret from './MaskedSecret';
 
 const ACCENT = '#426fe7';
 const BG = '#11131b';
@@ -809,16 +810,15 @@ function RevealSecretModal({ secret, onClose }) {
                                 Copy
                             </button>
                         </div>
-                        <div
-                            className="p-3 rounded font-mono text-xs break-all"
+                        <MaskedSecret
+                            value={secret}
+                            label="Client Secret"
                             style={{
                                 background: BG,
                                 color: TEXT,
                                 border: '1px solid rgba(239,68,68,0.4)'
                             }}
-                        >
-                            {secret}
-                        </div>
+                        />
                     </div>
 
                     <div

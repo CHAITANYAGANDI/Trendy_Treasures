@@ -1,17 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { handleSuccess, authFetch, googleErrorMessage } from '../utils';
 import GoogleSignInButton, { GoogleDivider } from './GoogleSignInButton';
 
 const ACCENT = '#426fe7';
 
 function AuthLogin() {
+    // After a password reset, AuthForgotPassword hands over the email it
+    // just reset and a confirmation notice.
+    const { state: navState } = useLocation();
+
     const [loginInfo, setLoginInfo] = useState({
-        username: '',
+        username: (navState && navState.identifier) || '',
         password: ''
     });
     const [showPassword, setShowPassword] = useState(false);
     const [errorBanner, setErrorBanner] = useState('');
+    const [notice, setNotice] = useState((navState && navState.notice) || '');
     const [submitting, setSubmitting] = useState(false);
 
     const navigate = useNavigate();
@@ -67,6 +72,7 @@ function AuthLogin() {
         const { name, value } = e.target;
         setLoginInfo({ ...loginInfo, [name]: value });
         if (errorBanner) setErrorBanner('');
+        if (notice) setNotice('');
     };
 
     const handleAuthLogin = async (e) => {
@@ -75,11 +81,12 @@ function AuthLogin() {
         const { username, password } = loginInfo;
 
         if (!username || !password) {
-            return setErrorBanner('Please enter both username and password.');
+            return setErrorBanner('Please enter your username or email and your password.');
         }
 
         setSubmitting(true);
         setErrorBanner('');
+        setNotice('');
 
         try {
             const response = await authFetch('/login', {
@@ -100,7 +107,7 @@ function AuthLogin() {
             }
 
             if (response.status === 403) {
-                setErrorBanner('Incorrect username or password. Please try again.');
+                setErrorBanner('Incorrect username/email or password. Please try again.');
             } else if (error && error.details && error.details[0]) {
                 setErrorBanner(error.details[0].message);
             } else {
@@ -141,9 +148,11 @@ function AuthLogin() {
                         </p>
                     </div>
 
+                    {/* text-left: .App centres text globally (App.css), which
+                        pulled the message away from its icon. */}
                     {errorBanner && (
                         <div
-                            className="text-sm rounded p-3 mb-5 flex items-start gap-2"
+                            className="text-sm text-left rounded p-3 mb-5 flex items-start gap-2"
                             style={{
                                 background: 'rgba(239, 68, 68, 0.1)',
                                 color: '#b91c1c',
@@ -156,13 +165,28 @@ function AuthLogin() {
                         </div>
                     )}
 
+                    {!errorBanner && notice && (
+                        <div
+                            className="text-sm text-left rounded p-3 mb-5 flex items-start gap-2"
+                            style={{
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                color: '#047857',
+                                border: '1px solid rgba(16, 185, 129, 0.3)'
+                            }}
+                            role="status"
+                        >
+                            <span className="material-symbols-outlined text-base mt-px">check_circle</span>
+                            <span>{notice}</span>
+                        </div>
+                    )}
+
                     <form onSubmit={handleAuthLogin} className="space-y-5">
                         <div>
                             <label
                                 className="block w-full pl-0 ml-0 text-left font-headline font-medium text-sm text-[#0b1c30] mb-1.5"
                                 htmlFor="username"
                             >
-                                Username
+                                Username or email
                             </label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -177,6 +201,7 @@ function AuthLogin() {
                                     value={loginInfo.username}
                                     onChange={handleChange}
                                     required
+                                    autoComplete="username"
                                     className="block w-full pl-10 pr-3 py-2.5 border border-[#dce9ff] rounded bg-[#f8f9ff] text-[#0b1c30] sm:text-sm font-body focus:outline-none focus:ring-2 focus:ring-[#426fe7] focus:border-[#426fe7] transition-shadow"
                                 />
                             </div>
