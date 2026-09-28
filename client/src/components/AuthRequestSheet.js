@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, Eye, EyeOff } from 'lucide-react';
 import { handleError, handleSuccess, logoutAdmin, apiFetch, AUTH_SERVER_URL, CLIENT_URL } from '../utils';
 import { Sheet, Field } from './ui/Primitives';
 
@@ -16,6 +16,7 @@ import { Sheet, Field } from './ui/Primitives';
 function AuthRequestSheet({ open, onClose }) {
     const navigate = useNavigate();
     const [submitting, setSubmitting] = useState(false);
+    const [showSecret, setShowSecret] = useState(false);
     const [formData, setFormData] = useState({
         apiName: '',
         clientId: '',
@@ -26,6 +27,8 @@ function AuthRequestSheet({ open, onClose }) {
     useEffect(() => {
         if (open) {
             setFormData({ apiName: '', clientId: '', clientSecret: '', redirectUri: '' });
+            // Every fresh open starts masked, even if it was revealed last time.
+            setShowSecret(false);
         }
     }, [open]);
 
@@ -113,12 +116,24 @@ function AuthRequestSheet({ open, onClose }) {
                     <Field
                         id="clientSecret"
                         name="clientSecret"
-                        type="password"
+                        type={showSecret ? 'text' : 'password'}
                         label="Client secret"
                         value={formData.clientSecret}
                         onChange={handleChange}
                         required
                         autoComplete="off"
+                        spellCheck="false"
+                        trailing={
+                            <button
+                                type="button"
+                                className="field-reveal"
+                                onClick={() => setShowSecret((v) => !v)}
+                                aria-label={showSecret ? 'Hide client secret' : 'Show client secret'}
+                                aria-pressed={showSecret}
+                            >
+                                {showSecret ? <EyeOff size={17} /> : <Eye size={17} />}
+                            </button>
+                        }
                     />
                     <Field
                         id="redirectUri"

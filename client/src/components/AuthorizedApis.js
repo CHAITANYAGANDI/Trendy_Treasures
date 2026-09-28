@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, AlertTriangle, Trash2 } from 'lucide-react';
+import { Copy, AlertTriangle, Trash2, Eye, EyeOff } from 'lucide-react';
 import { handleSuccess, handleError, logoutAdmin, apiFetch, showConfirm } from '../utils';
 import { Spinner } from './ui/Primitives';
+
+// Hidden tokens are all dots, and always the same number of them — showing
+// the first/last characters (or the whole thing when short) leaked part of
+// a live provider token, and a per-character mask leaks its length.
+const TOKEN_MASK = '•'.repeat(16);
 
 /**
  * The stored provider credentials, as a section of Auth management.
@@ -93,11 +98,7 @@ function AuthorizedApis({ onRequest }) {
         }
     };
 
-    const maskToken = (token) => {
-        if (!token) return '—';
-        if (token.length <= 12) return token;
-        return `${token.slice(0, 6)}••••••••${token.slice(-4)}`;
-    };
+    const maskToken = (token) => (token ? TOKEN_MASK : '—');
 
     return (
         <section aria-labelledby="authorized-apis-title">
@@ -123,26 +124,24 @@ function AuthorizedApis({ onRequest }) {
                 ) : credentials.length === 0 ? (
                     /* The empty state of a security surface has to answer the
                        admin's real question: is the storefront broken right now? */
-                    <div className="border-t border-hairline pt-8">
-                        <div className="flex gap-3.5 max-w-[620px]">
-                            <AlertTriangle size={20} className="shrink-0 mt-0.5 text-amber" aria-hidden="true" />
-                            <div>
-                                <h3 className="t-h4">No API authorizations yet</h3>
-                                <p className="t-ui dim mt-2 leading-relaxed">
-                                    Connect a store to start showing its products. Until then
-                                    the shop has nothing to list &mdash; shoppers see
-                                    &ldquo;We could not load products&rdquo; &mdash; and price
-                                    alerts stop being checked.
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={onRequest}
-                                    className="btn btn-blue mt-5"
-                                >
-                                    Request authorization
-                                </button>
-                            </div>
-                        </div>
+                    <div className="border-t border-hairline min-h-[360px] py-12 flex flex-col items-center justify-center text-center">
+                        <span className="w-14 h-14 rounded-full bg-amberWash grid place-items-center">
+                            <AlertTriangle size={24} className="text-amber" aria-hidden="true" />
+                        </span>
+                        <h3 className="t-h4 mt-5">No API authorizations yet</h3>
+                        <p className="t-ui dim mt-2 leading-relaxed max-w-[460px]">
+                            Connect a store to start showing its products. Until then
+                            the shop has nothing to list &mdash; shoppers see
+                            &ldquo;We could not load products&rdquo; &mdash; and price
+                            alerts stop being checked.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={onRequest}
+                            className="btn btn-blue mt-6"
+                        >
+                            Request authorization
+                        </button>
                     </div>
                 ) : (
                     <>
@@ -182,10 +181,15 @@ function AuthorizedApis({ onRequest }) {
                                                                 [credential._id]: !p[credential._id]
                                                             }))
                                                         }
-                                                        className="btn btn-plain text-cap"
+                                                        className="icon-btn"
                                                         aria-label={`${revealed[credential._id] ? 'Hide' : 'Show'} ${credential.api_name} token`}
+                                                        aria-pressed={Boolean(revealed[credential._id])}
                                                     >
-                                                        {revealed[credential._id] ? 'Hide' : 'Show'}
+                                                        {revealed[credential._id] ? (
+                                                            <EyeOff size={15} aria-hidden="true" />
+                                                        ) : (
+                                                            <Eye size={15} aria-hidden="true" />
+                                                        )}
                                                     </button>
                                                     <button
                                                         type="button"
