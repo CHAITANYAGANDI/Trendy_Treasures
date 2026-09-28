@@ -114,54 +114,8 @@ The live deployment covers the complete flow:
 
 The diagram below shows the current production architecture.
 
-```mermaid
-flowchart TB
-    Storefront["Storefront SPA<br/>React · Vercel"]
-    AuthClient["AuthShield SPA<br/>React · Vercel"]
+![Trendy Treasures high-level architecture: Storefront, AuthShield and provider checkout pages in the browser (hosted on Vercel); API Gateway, Users, AuthShield server, Amazon and Walmart on Google Cloud Run; four MongoDB Atlas databases; Brevo, OpenAI, Google OAuth and Stripe as external services; Cloud Build, Artifact Registry and Secret Manager as the config/build plane](assets/architecture.gif)
 
-    Gateway["API Gateway<br/>Node.js + Express · Cloud Run"]
-    Users["Users<br/>Node.js + Express · Cloud Run"]
-    Auth["Auth<br/>Node.js + Express · Cloud Run"]
-    Amazon["Amazon Provider<br/>Node.js + Express · Cloud Run"]
-    Walmart["Walmart Provider<br/>Python + Flask · Cloud Run"]
-
-    Atlas[("MongoDB Atlas")]
-    Secrets["Google Secret Manager"]
-    Actions["GitHub Actions<br/>6-hour snapshots"]
-    Stripe["Stripe<br/>card payments"]
-
-    Storefront --> Gateway
-    AuthClient --> Auth
-
-    Gateway --> Users
-    Gateway --> Amazon
-    Gateway --> Walmart
-    Gateway --> Auth
-
-    Users --> Auth
-    Amazon --> Auth
-    Walmart --> Auth
-
-    Users --> Atlas
-    Gateway --> Atlas
-    Auth --> Atlas
-    Amazon --> Atlas
-    Walmart --> Atlas
-
-    Secrets -.-> Gateway
-    Secrets -.-> Users
-    Secrets -.-> Auth
-    Secrets -.-> Amazon
-    Secrets -.-> Walmart
-
-    Actions --> Gateway
-
-    Storefront -.->|checkout redirect| Amazon
-    Storefront -.->|checkout redirect| Walmart
-    Amazon --> Stripe
-    Walmart --> Stripe
-
-```
 ## Technology Stack
 
 | Area | Technology |
