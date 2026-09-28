@@ -1674,6 +1674,20 @@
     flex-direction: column;
     padding: 18px 12px;
   }
+  /* The desktop sidebar holds still while long pages (the Guide, a long
+     user list) scroll, like the title bar does — otherwise it scrolled
+     away and Log out ended up at the very bottom of the content. Direct
+     children only: the mobile drawer reuses .sidebar but is positioned
+     inside its own overlay. */
+  @media (min-width: 1024px) {
+    .console > .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      height: 100dvh;
+      overflow-y: auto;
+    }
+  }
   .sidebar-item {
     display: flex;
     align-items: center;
