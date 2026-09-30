@@ -41,7 +41,8 @@ function AdminLogin() {
             const result = await response.json().catch(() => ({}));
             if (result.success) {
                 handleSuccess('Login successful');
-                setTimeout(() => navigate('/admin/users'), 800);
+                // replace: Back from the user list shouldn't reopen the form.
+                setTimeout(() => navigate('/admin/users', { replace: true }), 800);
             } else {
                 handleError(result.message || 'Login failed');
             }

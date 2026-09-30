@@ -10,31 +10,29 @@ import AuthSettings from "./components/AuthSettings";
 import AuthForgotPassword from "./components/AuthForgotPassword";
 import AuthGoogleCallback from "./components/AuthGoogleCallback";
 import AuthLanding from "./components/AuthLanding";
+import AuthNotFound from "./components/AuthNotFound";
 import RequireAuth from "./components/RequireAuth";
-// import RefreshHandler from './RefreshHandler';
+import RedirectIfSignedIn from "./components/RedirectIfSignedIn";
 
 function App() {
-
-    // const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-    // const PrivateRoute = ({ element }) => {
-    //     return isAuthenticated ? element : <Navigate to="/login" />
-    // }
     return (
 
         <div className="App">
-          
-          {/* <RefreshHandler setIsAuthenticated={setIsAuthenticated} /> */}
             <Routes>
                 <Route path="/" element={<AuthLanding />} />
-                <Route path="/auth/register" element={<AuthRegistration />} />
-                <Route path="/auth/login" element={<AuthLogin />} />
+                {/* Sign-in, registration and reset are for guests: an
+                    existing session skips them (RedirectIfSignedIn). */}
+                <Route path="/auth/register" element={<RedirectIfSignedIn><AuthRegistration /></RedirectIfSignedIn>} />
+                <Route path="/auth/login" element={<RedirectIfSignedIn><AuthLogin /></RedirectIfSignedIn>} />
                 <Route path="/auth/dashboard" element={<RequireAuth><AuthDashboard /></RequireAuth>} />
                 <Route path="/auth/credentials" element={<RequireAuth><AuthCredentials /></RequireAuth>} />
                 <Route path="/auth/creds/:id" element={<RequireAuth><AuthCredDetails /></RequireAuth>} />
                 <Route path="/auth/settings" element={<RequireAuth><AuthSettings /></RequireAuth>} />
-                <Route path="/auth/forgot-password" element={<AuthForgotPassword />} />
+                <Route path="/auth/forgot-password" element={<RedirectIfSignedIn><AuthForgotPassword /></RedirectIfSignedIn>} />
                 <Route path="/auth/google/callback" element={<AuthGoogleCallback />} />
+                {/* Anything no route above claims — ranked last, so it never
+                    shadows a real page. */}
+                <Route path="*" element={<AuthNotFound />} />
             </Routes>
             <CenterToast />
         </div>

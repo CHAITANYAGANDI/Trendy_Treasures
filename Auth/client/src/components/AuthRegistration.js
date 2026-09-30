@@ -154,8 +154,9 @@ function AuthRegistration() {
             if (response.ok && success) {
                 handleSuccess(message || 'Account verified.');
                 // verifySignupOtp already issued authToken + authRefreshToken,
-                // so the user is logged in — drop them on the dashboard.
-                navigate('/auth/dashboard');
+                // so the user is logged in — drop them on the dashboard, in
+                // place of the form so Back doesn't reopen it.
+                navigate('/auth/dashboard', { replace: true });
                 return;
             }
 

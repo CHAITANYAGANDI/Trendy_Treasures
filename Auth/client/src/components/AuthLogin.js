@@ -102,7 +102,8 @@ function AuthLogin() {
 
             if (response.ok && success) {
                 handleSuccess('Login successful');
-                navigate('/auth/dashboard');
+                // replace: Back from the dashboard shouldn't reopen the form.
+                navigate('/auth/dashboard', { replace: true });
                 return;
             }
 

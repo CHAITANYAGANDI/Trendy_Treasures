@@ -1,7 +1,7 @@
 // Session-probe de-duplication.
 //
-// RefreshHandler runs globally on every navigation, pages check the session
-// on mount, and RequireAdmin guards admin routes — so several identical
+// Pages and their header check the session on mount, and RequireAdmin and
+// RedirectIfSignedIn guard routes — so several identical
 // /auth/me calls fired milliseconds apart, each spending a request from the
 // shopper's rate-limit budget to learn the same thing.
 //

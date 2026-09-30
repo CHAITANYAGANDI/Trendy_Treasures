@@ -461,9 +461,9 @@ export const walmartFetch = (path, options = {}) =>
     fetchWithRefresh(`${WALMART_API}${path}`, options);
 
 
-// Session probes are requested from several places at once — RefreshHandler
-// runs globally on every navigation, pages check on mount, RequireAdmin
-// guards admin routes — which produced several identical /auth/me calls
+// Session probes are requested from several places at once — the page and
+// its header check on mount, RequireAdmin and RedirectIfSignedIn guard
+// routes — which produced several identical /auth/me calls
 // milliseconds apart, each one spending a request from the shopper's
 // rate-limit budget for the same answer.
 //
