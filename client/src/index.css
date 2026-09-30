@@ -1586,6 +1586,17 @@
     text-align: right;
     padding-right: 0;
   }
+  .table th.center,
+  .table td.center {
+    text-align: center;
+  }
+  /* Icon buttons are block-level grids, which ignore text-align — in a
+     right- or centre-aligned cell they sat at the cell's left edge, away
+     from their column heading. Inline, they follow the cell's alignment. */
+  .table td > .icon-btn {
+    display: inline-grid;
+    vertical-align: middle;
+  }
   .table td {
     padding: 14px 16px;
     border-bottom: 1px solid var(--hairline-soft);

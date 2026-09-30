@@ -152,21 +152,21 @@ function AuthorizedApis({ onRequest }) {
                             <table className="table">
                                 <thead>
                                     <tr>
-                                        <th>API name</th>
-                                        <th>API URL</th>
-                                        <th>Access token</th>
-                                        <th className="right">Status</th>
-                                        <th className="right">Action</th>
+                                        <th className="center">API name</th>
+                                        <th className="center">API URL</th>
+                                        <th className="center">Access token</th>
+                                        <th className="center">Status</th>
+                                        <th className="center">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {credentials.map((credential) => (
                                         <tr key={credential._id}>
-                                            <td className="font-medium">{credential.api_name}</td>
-                                            <td>
+                                            <td className="center font-medium">{credential.api_name}</td>
+                                            <td className="center">
                                                 <code className="mono dim">{credential.api_url}</code>
                                             </td>
-                                            <td>
+                                            <td className="center">
                                                 <span className="token">
                                                     <code>
                                                         {revealed[credential._id]
@@ -201,10 +201,10 @@ function AuthorizedApis({ onRequest }) {
                                                     </button>
                                                 </span>
                                             </td>
-                                            <td className="right">
+                                            <td className="center">
                                                 <span className="status status-ok">Active</span>
                                             </td>
-                                            <td className="right">
+                                            <td className="center">
                                                 <button
                                                     type="button"
                                                     onClick={() => deleteCredential(credential)}
