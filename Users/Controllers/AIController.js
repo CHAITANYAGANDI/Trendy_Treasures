@@ -5,16 +5,24 @@ const VALID_PROVIDERS = new Set(['amazon', 'walmart']);
 
 // ─── In-memory caches ──────────────────────────────────────────────────
 //
-// Price advice is deterministic-ish given the same history rows, and the
-// history only changes when the gateway writes a new snapshot (every 6h
-// per product by default). Caching trims the OpenAI bill by ~50–100x for
-// hot products without stale-data risk worth worrying about.
+// Price advice is deterministic-ish given the same history rows, so it's
+// cached — trimming the OpenAI bill ~50–100x for hot products. An entry
+// is only reused for the exact history it was computed from: the gateway
+// records a changed price at once (not just every 6h), and an age-only
+// cache kept showing the old price for hours after a change.
 //
 // Q&A is not cached — questions vary per buyer, and embedding-style
 // similarity caching is more complexity than it's worth at this scale.
 
 const PRICE_ADVICE_TTL_MS = 6 * 60 * 60 * 1000;
 const priceAdviceCache = new Map();
+
+// Identifies the history an answer was computed from. A new snapshot (or
+// an old one sliding out of the 30-day window) changes it.
+const historyFingerprint = (snapshots) => {
+    const last = snapshots[snapshots.length - 1];
+    return `${snapshots.length}:${new Date(last.snapshotted_at).getTime()}:${last.price}`;
+};
 
 
 // Statistical pre-computation we hand to the model. Doing the math in
@@ -37,6 +45,7 @@ const summarizeHistory = (snapshots) => {
         : 0;
     return {
         sampleCount: prices.length,
+        first: Number(prices[0].toFixed(2)),
         current: Number(current.toFixed(2)),
         min: Number(min.toFixed(2)),
         max: Number(max.toFixed(2)),
@@ -81,7 +90,15 @@ const describeForShopper = (stats) => {
 // Shown instead of calling the model when there's too little history to
 // say anything useful.
 const tooEarlyAdvice = (stats) => {
-    const soFar = stats ? ` — it's $${stats.current.toFixed(2)} so far` : '';
+    let soFar = '';
+    if (stats) {
+        const now = `$${stats.current.toFixed(2)}`;
+        // Even two points can show a real move — say so rather than
+        // reading as if the price had never changed.
+        soFar = stats.first === stats.current
+            ? ` — it's ${now} so far`
+            : ` — it's ${now} now, ${stats.current < stats.first ? 'down' : 'up'} from $${stats.first.toFixed(2)}`;
+    }
     return `We've only just started watching this price${soFar}. Check back in a few days and we'll tell you whether it's a good time to buy.`;
 };
 
@@ -97,17 +114,21 @@ const priceAdvice = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid input' });
         }
 
-        const cacheKey = `${provider}:${productId}`;
-        const cached = priceAdviceCache.get(cacheKey);
-        if (cached && Date.now() - cached.fetchedAt < PRICE_ADVICE_TTL_MS) {
-            return res.status(200).json({ success: true, advice: cached.advice, stats: cached.stats, cached: true });
-        }
-
         const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         const snapshots = await PriceSnapshot
             .find({ provider, product_id: productId, snapshotted_at: { $gte: since } })
             .sort({ snapshotted_at: 1 })
             .select('price snapshotted_at -_id');
+
+        // Reuse an answer only for the same history (the cheap indexed read
+        // above is what makes that check possible; the model call is the
+        // expensive part the cache exists to save).
+        const cacheKey = `${provider}:${productId}`;
+        const fingerprint = snapshots.length ? historyFingerprint(snapshots) : null;
+        const cached = priceAdviceCache.get(cacheKey);
+        if (cached && cached.fingerprint === fingerprint && Date.now() - cached.fetchedAt < PRICE_ADVICE_TTL_MS) {
+            return res.status(200).json({ success: true, advice: cached.advice, stats: cached.stats, cached: true });
+        }
 
         if (snapshots.length === 0) {
             return res.status(200).json({
@@ -125,7 +146,7 @@ const priceAdvice = async (req, res) => {
         // "check back later" in different words.
         if (stats.sampleCount < 3) {
             const advice = tooEarlyAdvice(stats);
-            priceAdviceCache.set(cacheKey, { advice, stats, fetchedAt: Date.now() });
+            priceAdviceCache.set(cacheKey, { advice, stats, fingerprint, fetchedAt: Date.now() });
             return res.status(200).json({ success: true, advice, stats, cached: false });
         }
 
@@ -156,7 +177,7 @@ const priceAdvice = async (req, res) => {
             });
         }
 
-        priceAdviceCache.set(cacheKey, { advice: result.content, stats, fetchedAt: Date.now() });
+        priceAdviceCache.set(cacheKey, { advice: result.content, stats, fingerprint, fetchedAt: Date.now() });
         return res.status(200).json({ success: true, advice: result.content, stats, cached: false });
     } catch (error) {
         console.error('priceAdvice error:', error.message);
