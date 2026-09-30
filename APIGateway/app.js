@@ -13,6 +13,7 @@ const jwt = require('jsonwebtoken');
 require('./Models/dbConnection');
 const CredsModel = require('./Models/Credential');
 const { createTokenManager } = require('./services/tokenManager');
+const { createPriceRecorder } = require('./services/priceSnapshots');
 const PriceSnapshot = require('./Models/PriceSnapshot');
 const PriceAlert = require('./Models/PriceAlert');
 
@@ -238,18 +239,18 @@ const isRefreshableFailure = (status, bodyText) => {
 // ─── On-read price snapshotting ─────────────────────────────────────────
 //
 // After every product-detail request flows through the gateway, we
-// snapshot the price into the price_snapshots collection — but ONLY if
-// the last snapshot for that product is older than the stale threshold,
-// so a popular product doesn't get a row per pageview. The snapshot
-// write + alert evaluation are fired-and-forgotten so the buyer's
-// response isn't blocked.
+// record the price in price_snapshots when it CHANGED, or when the last
+// snapshot is older than the stale threshold — so a price change shows on
+// the chart (and reaches price alerts) at once, while an unchanged price
+// still gets one row per window rather than one per pageview. The policy
+// lives in services/priceSnapshots.js. The write + alert evaluation are
+// fired-and-forgotten so the buyer's response isn't blocked.
 //
 // The product service returns either { product: {...} } (Amazon's
 // controller wraps it) or {...} directly (Walmart's to_json() doesn't),
 // so we sniff both shapes.
 
 const SNAPSHOT_STALE_MS = parseInt(process.env.SNAPSHOT_STALE_MS || (6 * 60 * 60 * 1000), 10);
-const NOTIFY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 const extractProduct = (body) => {
     try {
@@ -272,71 +273,13 @@ const extractProduct = (body) => {
     return null;
 };
 
-const recordPriceAndEvaluateAlerts = async (provider, product, originalUrl, reqId) => {
-    try {
-        const { product_id, product_name, price } = product;
-
-        // Stale check: skip snapshot if we already have a recent one. Cheap
-        // hot-path query — single index hit.
-        const last = await PriceSnapshot
-            .findOne({ provider, product_id })
-            .sort({ snapshotted_at: -1 })
-            .select('snapshotted_at');
-        const isStale = !last || (Date.now() - last.snapshotted_at.getTime()) > SNAPSHOT_STALE_MS;
-        if (!isStale) return;
-
-        await PriceSnapshot.create({ provider, product_id, product_name, price });
-        console.log(`[gateway] [${reqId}] 📷 Snapshot — ${provider}/${product_id} @ $${price}`);
-
-        // Find buyers whose threshold was crossed AND who aren't in cooldown.
-        // We use last_known_price as the "previous" price for the email body
-        // if there's no other reference. After firing, the internal handler
-        // updates last_notified_at + last_known_price.
-        const cooldownCutoff = new Date(Date.now() - NOTIFY_COOLDOWN_MS);
-        const alerts = await PriceAlert.find({
-            provider,
-            product_id,
-            threshold_price: { $gte: price },
-            $or: [
-                { last_notified_at: null },
-                { last_notified_at: { $lt: cooldownCutoff } }
-            ]
-        });
-
-        if (alerts.length === 0) return;
-        console.log(`[gateway] [${reqId}] 🔔 ${alerts.length} alert(s) triggered for ${provider}/${product_id}`);
-
-        const headers = { 'Content-Type': 'application/json' };
-        if (process.env.INTERNAL_AUTH_SECRET) {
-            headers['x-internal-auth'] = process.env.INTERNAL_AUTH_SECRET;
-        }
-
-        // Fire notifications in parallel. Each call is independent and
-        // already idempotent server-side (cooldown re-check), so failures
-        // on one alert don't affect the others.
-        await Promise.allSettled(alerts.map((alert) =>
-            fetch(`${USERS_TARGET}/internal/price-drop`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    alertId: String(alert._id),
-                    currentPrice: price,
-                    previousPrice: alert.last_known_price,
-                    productUrl: originalUrl
-                })
-            }).then(async (r) => {
-                if (!r.ok) {
-                    const text = await r.text().catch(() => '');
-                    console.warn(`[gateway] [${reqId}] ✗ price-drop notify failed for alert=${alert._id}: ${r.status} ${text.slice(0, 100)}`);
-                }
-            }).catch((err) => {
-                console.warn(`[gateway] [${reqId}] ✗ price-drop notify threw for alert=${alert._id}: ${err.message}`);
-            })
-        ));
-    } catch (err) {
-        console.error(`[gateway] [${reqId}] ✗ snapshot/evaluate failed for ${provider}/${product.product_id}:`, err.message);
-    }
-};
+const { recordPriceAndEvaluateAlerts } = createPriceRecorder({
+    PriceSnapshot,
+    PriceAlert,
+    usersTarget: USERS_TARGET,
+    staleMs: SNAPSHOT_STALE_MS,
+    logger: console
+});
 
 
 // Standalone upstream product-detail fetch with the same token-refresh
@@ -572,8 +515,9 @@ app.all('/api/v1/walmart/products*', proxyProductRoute(PROVIDER_CONFIG.walmart.a
 // their current prices — closing the coverage gap.
 //
 // Gated by INTERNAL_AUTH_SECRET. Designed to be called every few hours;
-// the SNAPSHOT_STALE_MS check inside recordPriceAndEvaluateAlerts means a
-// run that's too frequent is harmless (it just skips writes).
+// recordPriceAndEvaluateAlerts skips an unchanged price inside
+// SNAPSHOT_STALE_MS, so a run that's too frequent only writes rows for
+// prices that actually moved.
 app.post('/internal/snapshot-tracked', async (req, res) => {
     const authError = requireInternalAuth(req, res);
     if (authError) return authError;

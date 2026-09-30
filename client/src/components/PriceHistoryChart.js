@@ -8,6 +8,11 @@ const RANGE_OPTIONS = [
     { id: 90, label: '90d' }
 ];
 
+// Follow-up reads while the newest snapshot hasn't caught up with the
+// price on the page (see the fetch effect below).
+const HISTORY_RETRY_DELAYS_MS = [1500, 4000];
+const samePrice = (a, b) => Math.round(Number(a) * 100) === Math.round(Number(b) * 100);
+
 const fmtPrice = (n) => `$${Number(n).toFixed(2)}`;
 const fmtDate = (d) => {
     const x = new Date(d);
@@ -41,14 +46,33 @@ function PriceHistoryChart({ provider, productId, currentPrice }) {
 
     useEffect(() => {
         let cancelled = false;
+        let retryTimer = null;
         setLoading(true);
-        fetchPriceHistory(provider, productId, days).then((data) => {
-            if (cancelled) return;
-            setSnapshots(data || []);
-            setLoading(false);
-        });
-        return () => { cancelled = true; };
-    }, [provider, productId, days]);
+
+        // The gateway records a new or changed price just AFTER answering the
+        // product request, so this chart's first read can beat that write
+        // and still show the old history. If the newest point doesn't match
+        // the price on the page yet, look again — at most twice, never a
+        // poll, and never on a failed read.
+        const load = (attempt) => {
+            fetchPriceHistory(provider, productId, days).then((data) => {
+                if (cancelled) return;
+                setSnapshots(data || []);
+                setLoading(false);
+                if (!Array.isArray(data) || attempt >= HISTORY_RETRY_DELAYS_MS.length) return;
+                const newest = data[data.length - 1];
+                if (currentPrice != null && (!newest || !samePrice(newest.price, currentPrice))) {
+                    retryTimer = setTimeout(() => load(attempt + 1), HISTORY_RETRY_DELAYS_MS[attempt]);
+                }
+            });
+        };
+        load(0);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(retryTimer);
+        };
+    }, [provider, productId, days, currentPrice]);
 
     const stats = useMemo(() => {
         if (!snapshots || snapshots.length === 0) return null;
