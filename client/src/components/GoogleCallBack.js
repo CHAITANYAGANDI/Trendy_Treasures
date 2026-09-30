@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch, fetchCurrentUser } from '../utils';
+import { apiFetch, fetchCurrentUser, finishSignIn, peekSignInReturn, takeSignInReturn } from '../utils';
 import BrandMark from './BrandMark';
 import { Spinner } from './ui/Primitives';
 
@@ -11,6 +11,12 @@ function GoogleAuthCallback() {
     let mounted = true;
 
     async function completeGoogleSignIn() {
+      // Where the shopper was before leaving for Google (see Signin). On a
+      // failure it goes back with them, so trying again still returns there.
+      // Peeked, not taken: StrictMode runs this effect twice in development,
+      // and an abandoned first run mustn't consume it. Cleared on the way out.
+      const returnState = peekSignInReturn();
+
       // /authenticate consumes the one-shot `userInfo` handoff cookie. It
       // is only a nicety though — the real proof of sign-in is the session
       // cookie, so a miss here (already consumed, page refreshed) falls
@@ -19,7 +25,8 @@ function GoogleAuthCallback() {
         const response = await apiFetch('/authenticate');
         if (!mounted) return;
         if (response.ok) {
-          navigate('/home', { replace: true });
+          takeSignInReturn();
+          await finishSignIn(navigate, returnState);
           return;
         }
       } catch (error) {
@@ -28,8 +35,9 @@ function GoogleAuthCallback() {
 
       const user = await fetchCurrentUser();
       if (!mounted) return;
-      if (user) navigate('/home', { replace: true });
-      else navigate('/login?error=google_failed', { replace: true });
+      takeSignInReturn();
+      if (user) await finishSignIn(navigate, returnState);
+      else navigate('/login?error=google_failed', { replace: true, state: returnState });
     }
 
     completeGoogleSignIn();

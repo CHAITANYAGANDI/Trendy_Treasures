@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
-import { handleError, handleSuccess, API_BASE, apiFetch, googleErrorMessage, readApiError } from '../utils';
+import {
+    handleError,
+    handleSuccess,
+    API_BASE,
+    apiFetch,
+    googleErrorMessage,
+    readApiError,
+    finishSignIn,
+    rememberSignInReturn,
+    peekSignInReturn
+} from '../utils';
 import AuthLayout from './AuthLayout';
 import FormErrorBanner from './FormErrorBanner';
 import { Field } from './ui/Primitives';
@@ -13,7 +23,17 @@ function Signin() {
     const [errorBanner, setErrorBanner] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
+
+    // Where to go once signed in — set by the page that sent the shopper
+    // here (see signInState in utils). A failed Google round trip comes back
+    // as a full-page redirect with ?error=, which drops router state, so in
+    // that one case it's recovered from sessionStorage. Read once, before the
+    // effect below strips ?error=.
+    const [returnState] = useState(
+        () => location.state || (searchParams.has('error') ? peekSignInReturn() : null)
+    );
 
     // Google sign-in failures come back as a redirect to /login?error=<code>
     // (the OAuth round-trip is a full page navigation, so there is no fetch
@@ -59,7 +79,7 @@ function Signin() {
             const result = await response.json().catch(() => ({}));
             if (result.success) {
                 handleSuccess(result.message);
-                setTimeout(() => navigate('/home'), 800);
+                await finishSignIn(navigate, returnState);
             } else {
                 handleError(result.message || 'Login failed');
             }
@@ -77,7 +97,7 @@ function Signin() {
             footer={
                 <>
                     Don't have an account?{' '}
-                    <Link to="/signup" className="link font-medium">Create one</Link>
+                    <Link to="/signup" state={returnState} className="link font-medium">Create one</Link>
                 </>
             }
         >
@@ -130,7 +150,11 @@ function Signin() {
 
             <div className="auth-divider my-6">or</div>
 
-            <form action={`${API_BASE}/auth/google`} method="GET">
+            <form
+                action={`${API_BASE}/auth/google`}
+                method="GET"
+                onSubmit={() => rememberSignInReturn(returnState)}
+            >
                 <button type="submit" className="btn btn-quiet btn-lg btn-full">
                     <GoogleGlyph /> Continue with Google
                 </button>

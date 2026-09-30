@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ChevronLeft,
   Truck,
@@ -21,6 +21,7 @@ import {
   createCheckoutIntent,
   redirectToProviderCheckout,
   getGuestCart,
+  signInState,
 } from '../utils';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
@@ -45,6 +46,7 @@ function ProductDetails() {
   const [advisorOut, setAdvisorOut] = useState(false);
   const [qaOut, setQaOut] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const onAdvisorOut = useCallback(() => setAdvisorOut(true), []);
   const onQaOut = useCallback(() => setQaOut(true), []);
@@ -135,9 +137,30 @@ function ProductDetails() {
     }
   };
 
+  const startCheckout = async (qty) => {
+    try {
+      const { referralCode } = await createCheckoutIntent({
+        provider: source,
+        items: [{
+          providerProductId: productId,
+          source,
+          productName: product.name,
+          productPrice: product.price,
+          productImageUrl: product.imageUrl,
+          quantity: qty,
+        }],
+      });
+      redirectToProviderCheckout(source, referralCode);
+    } catch (err) {
+      handleError(err.message || 'Could not start checkout.');
+    }
+  };
+
   const handleBuyNow = async () => {
     if (!product) return;
     if (!currentUser) {
+      // Kept in the guest cart too, so the item isn't lost if they don't
+      // finish signing in — sign-in merges it into their account.
       addToGuestCart({
         productName: product.name,
         productDescription: product.description,
@@ -149,27 +172,35 @@ function ProductDetails() {
         providerProductId: productId,
       });
       handleError('Sign in to complete your purchase.');
-      navigate('/login');
+      navigate('/login', { state: signInState(location, { action: 'buyNow', quantity }) });
       return;
     }
-
-    try {
-      const { referralCode } = await createCheckoutIntent({
-        provider: source,
-        items: [{
-          providerProductId: productId,
-          source,
-          productName: product.name,
-          productPrice: product.price,
-          productImageUrl: product.imageUrl,
-          quantity,
-        }],
-      });
-      redirectToProviderCheckout(source, referralCode);
-    } catch (err) {
-      handleError(err.message || 'Could not start checkout.');
-    }
+    startCheckout(quantity);
   };
+
+  // Back from sign-in with an action to pick up (see signInState): carry on
+  // with what the shopper clicked, instead of making them find it again.
+  // Consumed straight away, so Back or a refresh can't start it twice.
+  const resume = location.state && location.state.resume;
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (!resume || resumedRef.current || !product || !currentUser) return;
+    resumedRef.current = true;
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+
+    if (resume.action === 'buyNow') {
+      if (!product.inStock) {
+        handleError('This item is out of stock now.');
+        return;
+      }
+      const qty = Math.max(1, Math.floor(Number(resume.quantity)) || 1);
+      setQuantity(qty);
+      startCheckout(qty);
+    } else if (resume.action === 'trackPrice') {
+      setTrackOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resume, product, currentUser]);
 
   if (!product) {
     return (
@@ -338,7 +369,7 @@ function ProductDetails() {
                     onClick={() => {
                       if (!currentUser) {
                         handleError('Sign in to track this price.');
-                        navigate('/login');
+                        navigate('/login', { state: signInState(location, { action: 'trackPrice' }) });
                         return;
                       }
                       setTrackOpen(true);

@@ -1,7 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Search, Bell, LogOut, Trash2, User, ChevronDown } from 'lucide-react';
-import { handleCartClick, handleError, handleSuccess, apiFetch, logoutUser, showConfirm } from '../utils';
+import {
+  handleCartClick,
+  handleError,
+  handleSuccess,
+  apiFetch,
+  logoutUser,
+  showConfirm,
+  signInState,
+} from '../utils';
 import BrandMark from './BrandMark';
 
 /**
@@ -22,6 +30,7 @@ function SiteHeader({
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Close the dropdown when the user clicks outside of it.
   useEffect(() => {
@@ -134,7 +143,7 @@ function SiteHeader({
               a plain link to the sign-in page, and the dropdown only exists
               once there's an account to manage. */}
           {!currentUser ? (
-            <Link to="/login" className="nav-account" aria-label="Sign in">
+            <Link to="/login" state={signInState(location)} className="nav-account" aria-label="Sign in">
               <User size={19} className="dim" aria-hidden="true" />
               <span className="hidden lg:inline t-ui font-medium">Sign in</span>
             </Link>

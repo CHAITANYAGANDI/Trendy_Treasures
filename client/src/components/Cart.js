@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ShoppingBag, Trash2, Lock, Info, ArrowRight, ChevronLeft } from 'lucide-react';
 import {
   handleError,
@@ -12,6 +12,7 @@ import {
   createCheckoutIntent,
   redirectToProviderCheckout,
   logoutUser,
+  signInState,
 } from '../utils';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
@@ -31,6 +32,9 @@ function Cart() {
   const [subTotal, setSubTotal] = useState(0);
   const [updatedItems, setUpdatedItems] = useState({});
   const navigate = useNavigate();
+  const location = useLocation();
+  // Every route to sign-in from here comes back to the cart afterwards.
+  const signInHere = { state: signInState(location) };
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +59,7 @@ function Cart() {
     await logoutUser();
     setCurrentUser(null);
     handleSuccess('Logged out successfully');
-    setTimeout(() => navigate('/login'), 800);
+    setTimeout(() => navigate('/login', signInHere), 800);
   };
 
   const fetchCartDetails = async () => {
@@ -162,7 +166,7 @@ function Cart() {
   const handleSourceCheckout = async (source) => {
     if (!currentUser) {
       handleError('Sign in to complete your purchase.');
-      navigate('/login');
+      navigate('/login', signInHere);
       return;
     }
     const providerSource = normalizeSource(source);
@@ -316,7 +320,7 @@ function Cart() {
         {!currentUser && authResolved && cartItems.length > 0 && (
           <Notice icon={<Info size={17} aria-hidden="true" />} className="mb-8">
             Items in this cart are stored in your browser.{' '}
-            <Link to="/login" className="link font-medium">Sign in</Link> to save them
+            <Link to="/login" state={signInHere.state} className="link font-medium">Sign in</Link> to save them
             and check out.
           </Notice>
         )}
@@ -393,7 +397,7 @@ function Cart() {
                 {!currentUser ? (
                   <button
                     type="button"
-                    onClick={() => navigate('/login')}
+                    onClick={() => navigate('/login', signInHere)}
                     className="btn btn-blue btn-lg btn-full"
                   >
                     <Lock size={15} aria-hidden="true" /> Sign in to check out

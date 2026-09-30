@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { handleError, handleSuccess, apiFetch } from '../utils';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { handleError, handleSuccess, apiFetch, finishSignIn } from '../utils';
 import AuthLayout from './AuthLayout';
 import { Passcode } from './ui/Primitives';
 
@@ -8,6 +8,8 @@ function VerifySignupOtp() {
     const [otp, setOtp] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
+    // Passed along from Signup: where to return once the account exists.
+    const { state: returnState } = useLocation();
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
@@ -23,7 +25,9 @@ function VerifySignupOtp() {
             const result = await response.json();
             if (result.success) {
                 handleSuccess(result.message);
-                setTimeout(() => navigate('/home'), 800);
+                // Verification signs the new account in, so finish sign-in
+                // the same way the sign-in page does.
+                await finishSignIn(navigate, returnState);
             } else {
                 handleError(result.message);
             }
@@ -41,7 +45,7 @@ function VerifySignupOtp() {
             footer={
                 <>
                     Wrong email?{' '}
-                    <Link to="/signup" className="link font-medium">Start over</Link>
+                    <Link to="/signup" state={returnState} className="link font-medium">Start over</Link>
                 </>
             }
         >

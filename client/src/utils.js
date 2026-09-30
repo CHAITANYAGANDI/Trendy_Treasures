@@ -672,6 +672,80 @@ export const mergeGuestCart = async () => {
     clearGuestCart();
 };
 
+// ─── Back to where the shopper was, after signing in ─────────────────────
+//
+// A page that needs an account sends the shopper to /login with
+// `state: signInState(location, resume)` — `from` is the page they were on,
+// `resume` optionally names the action to pick back up there, e.g.
+// { action: 'buyNow', quantity: 2 }. Every way of signing in (password,
+// Google, a brand-new account) ends in finishSignIn, which moves the guest
+// cart into the account and goes back.
+
+// Only pages inside this app, and never the sign-in screens themselves, so
+// a crafted state can't send anyone off-site or round a sign-in loop.
+export const safeReturnPath = (from) => {
+    const path = from && typeof from.pathname === 'string' ? from.pathname : '';
+    if (!path.startsWith('/') || path.startsWith('//')) return null;
+    if (NON_REDIRECT_PATHS.includes(path) || path === '/auth/google/callback' || path.startsWith('/admin')) {
+        return null;
+    }
+    const search = from && typeof from.search === 'string' ? from.search : '';
+    return path + search;
+};
+
+export const signInState = (location, resume) => ({
+    from: { pathname: location.pathname, search: location.search },
+    ...(resume ? { resume } : {})
+});
+
+// The guest cart used to be merged only when /home loaded, which is why
+// every sign-in went there. Merging here lets sign-in return anywhere.
+export const finishSignIn = async (navigate, returnState) => {
+    await mergeGuestCart();
+    const target = returnState && safeReturnPath(returnState.from);
+    if (target) {
+        navigate(target, { replace: true, state: returnState.resume ? { resume: returnState.resume } : null });
+    } else {
+        navigate('/home', { replace: true });
+    }
+};
+
+// Google sign-in is a full-page round trip, so router state can't survive
+// it — park it in sessionStorage. Always overwrite (or clear) on the way
+// out, so a target left by an abandoned attempt can't hijack a later one.
+const SIGN_IN_RETURN_KEY = 'tt_sign_in_return';
+
+export const rememberSignInReturn = (returnState) => {
+    try {
+        if (returnState && safeReturnPath(returnState.from)) {
+            sessionStorage.setItem(SIGN_IN_RETURN_KEY, JSON.stringify(returnState));
+        } else {
+            sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
+        }
+    } catch {
+        // Storage unavailable — sign-in still works, it just lands on /home.
+    }
+};
+
+export const peekSignInReturn = () => {
+    try {
+        const raw = sessionStorage.getItem(SIGN_IN_RETURN_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+};
+
+export const takeSignInReturn = () => {
+    const returnState = peekSignInReturn();
+    try {
+        sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
+    } catch {
+        // Nothing to clear.
+    }
+    return returnState;
+};
+
 export default handleCartClick;
 
 

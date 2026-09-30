@@ -2,11 +2,6 @@ import React, { useRef, useState } from 'react';
 import { MessageSquareText, ArrowUp } from 'lucide-react';
 import { askProductQuestion, apiErrorMessage } from '../utils';
 
-const SUGGESTED = [
-    'Is this good for everyday use?',
-    'What materials is it made of?',
-    'Will this fit a small space?'
-];
 const QUESTION_MAX_LEN = 240;
 
 // Stateless chat panel: each question is independent (no conversation
@@ -109,15 +104,7 @@ function ProductQAChat({
                 </div>
             </header>
 
-            {exchanges.length === 0 ? (
-                <div className="mt-5 flex flex-wrap gap-2">
-                    {SUGGESTED.map((s) => (
-                        <button key={s} type="button" onClick={() => submit(s)} className="chip">
-                            {s}
-                        </button>
-                    ))}
-                </div>
-            ) : (
+            {exchanges.length > 0 && (
                 <div
                     ref={scrollRef}
                     className={`mt-5 flex flex-col gap-3 ${

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { handleSuccess, apiFetch, isStrongPassword, STRONG_PASSWORD_MESSAGE } from '../utils';
 import AuthLayout from './AuthLayout';
@@ -13,6 +13,9 @@ function Signup() {
     const [submitting, setSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
+    // Where to return after the account exists (see signInState in utils),
+    // carried through verification.
+    const { state: returnState } = useLocation();
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -44,7 +47,7 @@ function Signup() {
             const { success, message, error } = result;
             if (response.ok && success) {
                 handleSuccess(message);
-                setTimeout(() => navigate('/verify-signup'), 800);
+                setTimeout(() => navigate('/verify-signup', { state: returnState }), 800);
             } else if (error) {
                 setErrorBanner(error?.details?.[0]?.message || 'Signup failed');
             } else {
@@ -64,7 +67,7 @@ function Signup() {
             footer={
                 <>
                     Already have an account?{' '}
-                    <Link to="/login" className="link font-medium">Sign in</Link>
+                    <Link to="/login" state={returnState} className="link font-medium">Sign in</Link>
                 </>
             }
         >

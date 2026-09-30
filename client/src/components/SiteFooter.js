@@ -1,6 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import BrandMark, { Wordmark } from './BrandMark';
+import { signInState } from '../utils';
 
 /**
  * A haze band closing every storefront page: the brand lockup and the same
@@ -8,6 +9,7 @@ import BrandMark, { Wordmark } from './BrandMark';
  * pages.
  */
 function SiteFooter() {
+  const location = useLocation();
   return (
     <footer className="foot">
       <div className="shell-wide">
@@ -27,7 +29,7 @@ function SiteFooter() {
 
           <div>
             <h5>Account</h5>
-            <Link to="/login">Sign in</Link>
+            <Link to="/login" state={signInState(location)}>Sign in</Link>
             <Link to="/signup">Create account</Link>
             <Link to="/forgotpassword">Forgot password</Link>
           </div>
