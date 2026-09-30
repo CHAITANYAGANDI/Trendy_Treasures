@@ -26,9 +26,9 @@ function AuthManagement() {
                 </button>
             }
         >
-            <div className="max-w-[1220px]">
-                <AuthorizedApis onRequest={() => setRequestOpen(true)} />
-            </div>
+            {/* Full width, like the title bar above it: a 1220px cap left
+                the table stranded mid-page on wide screens or zoomed out. */}
+            <AuthorizedApis onRequest={() => setRequestOpen(true)} />
 
             <AuthRequestSheet open={requestOpen} onClose={() => setRequestOpen(false)} />
         </AdminShell>

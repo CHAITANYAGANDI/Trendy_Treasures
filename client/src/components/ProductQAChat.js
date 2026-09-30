@@ -16,6 +16,9 @@ function ProductQAChat({
     productFeatures,
     productPrice,
     bare = false,
+    // Pin the question box to the bottom edge of the surrounding panel, the
+    // way a chat input sits (the Product Intelligence slide-over).
+    dockComposer = false,
     onUnavailable
 }) {
     const [question, setQuestion] = useState('');
@@ -80,10 +83,16 @@ function ProductQAChat({
         });
 
         // Scroll to the latest answer on the next tick — exchanges have
-        // already rendered by then.
+        // already rendered by then. Docked, the list doesn't scroll itself
+        // (the panel does), so bring the newest bubble up above the box.
         requestAnimationFrame(() => {
-            if (scrollRef.current) {
-                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            const list = scrollRef.current;
+            if (!list) return;
+            if (dockComposer) {
+                const latest = list.lastElementChild;
+                if (latest && latest.scrollIntoView) latest.scrollIntoView({ block: 'end', behavior: 'smooth' });
+            } else {
+                list.scrollTop = list.scrollHeight;
             }
         });
     };
@@ -93,7 +102,7 @@ function ProductQAChat({
     // `bare` drops the bordered card and its luminous rule, for when the
     // surface around it already carries both.
     return (
-        <section className={bare ? '' : 'ai'}>
+        <section className={[bare ? '' : 'ai', dockComposer ? 'qa-docked' : ''].filter(Boolean).join(' ')}>
             <header className="flex items-center gap-2.5">
                 <span className="ai-glyph">
                     <MessageSquareText size={15} aria-hidden="true" />
@@ -130,7 +139,7 @@ function ProductQAChat({
 
             <form
                 onSubmit={(e) => { e.preventDefault(); submit(question); }}
-                className="mt-5"
+                className={dockComposer ? 'qa-composer' : 'mt-5'}
             >
                 <div className="flex items-center gap-2">
                     <label className="search flex-1 !h-11 !rounded-fld">

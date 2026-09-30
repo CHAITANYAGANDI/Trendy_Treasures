@@ -124,7 +124,9 @@ function UserManagement() {
         </button>
       }
     >
-      <div className="max-w-[1220px]">
+      {/* Full width, like the title bar above it: a 1220px cap left the
+          table stranded mid-page on wide screens or zoomed out. */}
+      <div>
         <div className="flex flex-wrap items-center gap-3 mb-5">
           <label className="search w-full sm:w-[320px]">
             <Search size={15} aria-hidden="true" className="shrink-0" />

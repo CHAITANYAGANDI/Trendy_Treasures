@@ -478,6 +478,7 @@ function ProductDetails() {
 
           <ProductQAChat
             bare
+            dockComposer
             onUnavailable={onQaOut}
             provider={source}
             productId={product._id || productId}
