@@ -48,15 +48,11 @@ Payments use **Stripe test mode**. Amazon and Walmart are simulated provider ser
 
 ## Product Preview
 
-The live deployment covers the complete flow:
+A quick walkthrough of Trendy Treasures' core workflow — issue provider credentials in AuthShield, authorize them from the admin portal, open a Walmart product, get AI price advice and grounded answers about it, review its price history, sign in, and check out on Walmart with a Stripe test payment.
 
-- browse Amazon and Walmart products through one storefront
-- create shopper or admin sessions, including Google sign-in
-- add products to a guest or authenticated cart
-- track prices and receive price-drop alerts
-- ask product questions or request AI price advice
-- hand checkout to the correct provider
-- create, rotate and authorize provider credentials through AuthShield
+
+https://github.com/user-attachments/assets/afbd76b9-bc04-4691-b337-6c526f2cd250
+
 
 ## Core Features
 
