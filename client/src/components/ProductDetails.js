@@ -365,7 +365,7 @@ function ProductDetails() {
                       <span className="ai-glyph !w-[19px] !h-[19px] !rounded-[6px]">
                         <Sparkles size={11} aria-hidden="true" />
                       </span>
-                      Buy now or wait?
+                      Product Intelligence
                     </button>
                     <p className="text-cap dimmer text-center mt-2.5 leading-relaxed">
                       Price advice and questions about this listing

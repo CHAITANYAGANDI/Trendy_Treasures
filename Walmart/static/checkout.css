@@ -55,13 +55,6 @@ body {
     font-weight: 700;
 }
 
-.wm-logo-spark {
-    color: var(--wm-yellow);
-    font-size: 30px;
-    transform: rotate(15deg);
-    display: inline-block;
-}
-
 .wm-header-tag {
     color: #ffffffd0;
     font-size: 13px;
