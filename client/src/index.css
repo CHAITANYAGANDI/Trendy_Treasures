@@ -1647,8 +1647,23 @@
     font-weight: 500;
   }
 
+  /* Value in the middle, controls hanging off its right. The empty first
+     track is a 1fr twin of the controls' track, so it grows to exactly
+     their width — the value itself, not value + buttons, is what centres
+     under the column heading. */
   .token {
-    display: inline-flex;
+    display: inline-grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    column-gap: 8px;
+  }
+  .token > code {
+    grid-column: 2;
+  }
+  .token-actions {
+    grid-column: 3;
+    justify-self: start;
+    display: flex;
     align-items: center;
     gap: 8px;
   }

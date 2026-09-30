@@ -173,32 +173,34 @@ function AuthorizedApis({ onRequest }) {
                                                             ? credential.access_token
                                                             : maskToken(credential.access_token)}
                                                     </code>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            setRevealed((p) => ({
-                                                                ...p,
-                                                                [credential._id]: !p[credential._id]
-                                                            }))
-                                                        }
-                                                        className="icon-btn"
-                                                        aria-label={`${revealed[credential._id] ? 'Hide' : 'Show'} ${credential.api_name} token`}
-                                                        aria-pressed={Boolean(revealed[credential._id])}
-                                                    >
-                                                        {revealed[credential._id] ? (
-                                                            <EyeOff size={15} aria-hidden="true" />
-                                                        ) : (
-                                                            <Eye size={15} aria-hidden="true" />
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => copyToken(credential.access_token)}
-                                                        className="icon-btn"
-                                                        aria-label={`Copy ${credential.api_name} token`}
-                                                    >
-                                                        <Copy size={15} aria-hidden="true" />
-                                                    </button>
+                                                    <span className="token-actions">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setRevealed((p) => ({
+                                                                    ...p,
+                                                                    [credential._id]: !p[credential._id]
+                                                                }))
+                                                            }
+                                                            className="icon-btn"
+                                                            aria-label={`${revealed[credential._id] ? 'Hide' : 'Show'} ${credential.api_name} token`}
+                                                            aria-pressed={Boolean(revealed[credential._id])}
+                                                        >
+                                                            {revealed[credential._id] ? (
+                                                                <EyeOff size={15} aria-hidden="true" />
+                                                            ) : (
+                                                                <Eye size={15} aria-hidden="true" />
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => copyToken(credential.access_token)}
+                                                            className="icon-btn"
+                                                            aria-label={`Copy ${credential.api_name} token`}
+                                                        >
+                                                            <Copy size={15} aria-hidden="true" />
+                                                        </button>
+                                                    </span>
                                                 </span>
                                             </td>
                                             <td className="center">
